@@ -7,9 +7,10 @@ from dotenv import load_dotenv
 from openai import OpenAI
 from flask import Flask, request, send_file, Response, render_template
 
-load_dotenv()
+load_dotenv()  # no-op in production where env vars are set directly
 
 app = Flask(__name__)
+app.config["MAX_CONTENT_LENGTH"] = 4 * 1024 * 1024  # 4 MB form limit
 
 
 def get_client():
