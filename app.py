@@ -1,8 +1,11 @@
+import io
 import json
 import os
+import re
+import markdown as md
 from dotenv import load_dotenv
 from openai import OpenAI
-from flask import Flask, request, send_file, Response
+from flask import Flask, request, send_file, Response, render_template
 
 load_dotenv()
 
@@ -68,6 +71,116 @@ def call_claude(data: dict) -> str:
         ],
     )
     return response.choices[0].message.content
+
+
+def markdown_to_pdf(draft: str, data: dict) -> bytes:
+    company = data.get("company", {})
+    director = company.get("director", {})
+
+    # Strip the AI's own cover heading — the template provides the cover page
+    body = re.sub(r"^#\s+BUSINESS RESPONSIBILITY.*?\n", "", draft, flags=re.IGNORECASE)
+
+    html_body = md.markdown(
+        body,
+        extensions=["tables", "nl2br", "sane_lists"],
+    )
+
+    full_html = render_template(
+        "pdf_report.html",
+        html_body=html_body,
+        company_name=company.get("name") or "[Company Name]",
+        fy=company.get("financial_year") or "",
+        cin=company.get("cin") or "",
+        director_name=director.get("name") or "",
+        director_din=director.get("din") or "",
+        director_designation=director.get("designation") or "",
+    )
+
+    # Try WeasyPrint first (works on Linux/Railway), fall back to xhtml2pdf on Windows
+    try:
+        from weasyprint import HTML
+        return HTML(string=full_html).write_pdf()
+    except Exception:
+        return _pdf_via_xhtml2pdf(html_body, data)
+
+
+def _pdf_via_xhtml2pdf(html_body: str, data: dict) -> bytes:
+    """Simplified PDF for local Windows dev — xhtml2pdf doesn't support CSS Paged Media."""
+    from xhtml2pdf import pisa
+
+    company = data.get("company", {})
+    director = company.get("director", {})
+    company_name = company.get("name") or "[Company Name]"
+    fy = company.get("financial_year") or ""
+    cin = company.get("cin") or "[To be confirmed]"
+    director_name = director.get("name") or ""
+    director_din = director.get("din") or ""
+    director_designation = director.get("designation") or ""
+
+    simple_html = f"""<!DOCTYPE html>
+<html><head><meta charset="UTF-8">
+<style>
+@page {{ size: A4; margin: 22mm 20mm 22mm 25mm; }}
+body {{ font-family: Georgia, serif; font-size: 10pt; line-height: 1.6; color: #111827; }}
+h1 {{ font-family: Arial, sans-serif; font-size: 14pt; font-weight: bold; color: #1e3a5f;
+      text-transform: uppercase; border-bottom: 2pt solid #1e3a5f; padding-bottom: 3pt;
+      margin-top: 14pt; page-break-after: avoid; }}
+h2 {{ font-family: Arial, sans-serif; font-size: 12pt; font-weight: bold; color: #1e3a5f;
+      border-bottom: 1pt solid #93c5fd; padding-bottom: 2pt; margin-top: 12pt; page-break-after: avoid; }}
+h3 {{ font-family: Arial, sans-serif; font-size: 10.5pt; font-weight: bold; color: #1e40af;
+      margin-top: 10pt; page-break-after: avoid; }}
+h4 {{ font-family: Arial, sans-serif; font-size: 10pt; font-weight: bold; color: #374151; margin-top: 8pt; }}
+p  {{ margin-bottom: 6pt; text-align: justify; }}
+table {{ width: 100%; border-collapse: collapse; margin: 6pt 0 10pt 0; font-size: 9pt; }}
+th {{ background-color: #1e3a5f; color: white; font-family: Arial, sans-serif;
+      font-size: 8.5pt; padding: 5pt 7pt; text-align: left; border: 0.5pt solid #1e3a5f; }}
+td {{ padding: 4pt 7pt; border: 0.5pt solid #d1d5db; font-size: 9pt; vertical-align: top; }}
+ul, ol {{ padding-left: 14pt; margin-bottom: 6pt; }}
+li {{ margin-bottom: 2pt; }}
+hr {{ border: none; border-top: 1pt solid #e5e7eb; margin: 10pt 0; }}
+.cover {{ page-break-after: always; padding: 10mm 0; }}
+.cover-band {{ background-color: #1e3a5f; height: 10mm; width: 100%; }}
+.cover-inner {{ padding: 12mm 0; }}
+.cover-title {{ font-family: Arial, sans-serif; font-size: 12pt; font-weight: bold;
+                color: #1e3a5f; text-transform: uppercase; margin-bottom: 2mm; }}
+.cover-name  {{ font-family: Arial, sans-serif; font-size: 22pt; font-weight: bold;
+                color: #111827; margin: 4mm 0; }}
+.cover-meta  {{ font-family: Arial, sans-serif; font-size: 10pt; color: #374151;
+                margin-bottom: 2mm; }}
+.note-box {{ border: 1pt solid #d1d5db; padding: 5mm; margin-top: 8mm;
+             background-color: #f9fafb; font-family: Arial, sans-serif;
+             font-size: 9pt; color: #374151; }}
+</style>
+</head><body>
+
+<div class="cover">
+  <div class="cover-band"></div>
+  <div class="cover-inner">
+    <p class="cover-title">Business Responsibility &amp; Sustainability Report</p>
+    <p class="cover-title" style="font-size:9pt;color:#6b7280;font-weight:normal;">
+      BRSR Core &mdash; For Independent Assurance
+    </p>
+    <p class="cover-name">{company_name}</p>
+    <p class="cover-meta"><b>Financial Year:</b> {fy}</p>
+    <p class="cover-meta"><b>CIN:</b> {cin}</p>
+    {"<p class='cover-meta'><b>Director Responsible:</b> " + director_name + (", DIN: " + director_din if director_din else "") + (", " + director_designation if director_designation else "") + "</p>" if director_name else ""}
+    <p class="cover-meta"><b>Regulatory Reference:</b> SEBI Circular SEBI/HO/CFD/CFD-SEC-2/P/CIR/2023/122 dated July 12, 2023</p>
+    <div class="note-box">
+      <b>Note:</b> This is a first draft for internal review. All figures must be
+      verified against source data before filing. Qualitative disclosures require
+      sign-off from the responsible team.
+    </div>
+  </div>
+  <div class="cover-band"></div>
+</div>
+
+{html_body}
+
+</body></html>"""
+
+    buf = io.BytesIO()
+    pisa.CreatePDF(simple_html, dest=buf)
+    return buf.getvalue()
 
 
 @app.route("/")
@@ -374,7 +487,18 @@ def generate():
     }
 
     draft = call_claude(data)
-    return Response(draft, status=200, mimetype="text/plain; charset=utf-8")
+    pdf_bytes = markdown_to_pdf(draft, data)
+
+    company_name = (data.get("company", {}).get("name") or "Company").replace(" ", "_")
+    fy = (data.get("company", {}).get("financial_year") or "FY").replace(" ", "_")
+    filename = f"BRSR_Core_{company_name}_{fy}.pdf"
+
+    return send_file(
+        io.BytesIO(pdf_bytes),
+        mimetype="application/pdf",
+        as_attachment=True,
+        download_name=filename,
+    )
 
 
 if __name__ == "__main__":
