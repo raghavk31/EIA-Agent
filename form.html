@@ -1,0 +1,1204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BRSR Core — Report Generator</title>
+<style>
+  :root {
+    --bg: #f5f6f8;
+    --card: #ffffff;
+    --border: #e2e5ea;
+    --text: #1a1d23;
+    --muted: #6b7280;
+    --label: #374151;
+    --accent: #2563eb;
+    --accent-light: #eff6ff;
+    --green: #059669;
+    --green-light: #ecfdf5;
+    --orange: #d97706;
+    --orange-light: #fffbeb;
+    --red: #dc2626;
+    --red-light: #fef2f2;
+    --purple: #7c3aed;
+    --purple-light: #f5f3ff;
+    --radius: 8px;
+    --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  /* ── TOP NAV ── */
+  .topbar {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: #fff;
+    border-bottom: 1px solid var(--border);
+    padding: 0 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 52px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+  }
+  .topbar-logo { font-weight: 700; font-size: 15px; color: var(--accent); letter-spacing: -0.3px; }
+  .topbar-logo span { color: var(--text); font-weight: 400; font-size: 13px; margin-left: 8px; }
+  .topbar-actions { display: flex; gap: 8px; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 7px 16px; border-radius: 6px; font-size: 13px;
+    font-weight: 500; cursor: pointer; border: none; transition: all 0.15s;
+  }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-primary:hover { background: #1d4ed8; }
+  .btn-outline { background: #fff; color: var(--text); border: 1px solid var(--border); }
+  .btn-outline:hover { background: var(--bg); }
+
+  /* ── LAYOUT ── */
+  .layout { display: flex; min-height: calc(100vh - 52px); }
+
+  /* ── SIDEBAR NAV ── */
+  .sidebar {
+    width: 220px;
+    flex-shrink: 0;
+    position: sticky;
+    top: 52px;
+    height: calc(100vh - 52px);
+    overflow-y: auto;
+    background: #fff;
+    border-right: 1px solid var(--border);
+    padding: 16px 0;
+  }
+  .sidebar-section { margin-bottom: 4px; }
+  .sidebar-label {
+    font-size: 10px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.8px; color: var(--muted); padding: 8px 16px 4px;
+  }
+  .sidebar a {
+    display: block; padding: 6px 16px; color: var(--label); text-decoration: none;
+    font-size: 13px; border-left: 2px solid transparent; transition: all 0.1s;
+  }
+  .sidebar a:hover { color: var(--accent); background: var(--accent-light); border-left-color: var(--accent); }
+
+  /* ── MAIN CONTENT ── */
+  .main { flex: 1; padding: 24px 32px; max-width: 900px; }
+
+  .page-title { font-size: 22px; font-weight: 700; margin-bottom: 4px; }
+  .page-sub { color: var(--muted); font-size: 13px; margin-bottom: 28px; }
+
+  /* ── SECTION CARDS ── */
+  .section { margin-bottom: 24px; }
+  .section-header {
+    display: flex; align-items: center; gap: 10px;
+    padding: 14px 20px; border-radius: var(--radius) var(--radius) 0 0;
+    border: 1px solid var(--border); border-bottom: none;
+  }
+  .section-badge {
+    font-size: 11px; font-weight: 700; padding: 2px 8px;
+    border-radius: 20px; background: rgba(255,255,255,0.3); color: inherit;
+  }
+  .section-title { font-size: 14px; font-weight: 700; }
+  .section-desc { font-size: 12px; opacity: 0.85; margin-left: auto; }
+
+  .section-body {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 0 0 var(--radius) var(--radius);
+    padding: 0;
+    box-shadow: var(--shadow);
+  }
+
+  /* ── ATTRIBUTE COLORS ── */
+  .attr-general   { background: #1e3a5f; color: #fff; }
+  .attr-mgmt      { background: #374151; color: #fff; }
+  .attr-ghg       { background: #991b1b; color: #fff; }
+  .attr-water     { background: #1e40af; color: #fff; }
+  .attr-energy    { background: #b45309; color: #fff; }
+  .attr-waste     { background: #15803d; color: #fff; }
+  .attr-safety    { background: #6d28d9; color: #fff; }
+  .attr-gender    { background: #be185d; color: #fff; }
+  .attr-inclusive { background: #0369a1; color: #fff; }
+  .attr-fairness  { background: #0f766e; color: #fff; }
+  .attr-openness  { background: #57534e; color: #fff; }
+
+  /* ── FIELD ROWS ── */
+  .field-group { border-bottom: 1px solid var(--border); }
+  .field-group:last-child { border-bottom: none; }
+
+  .field-header {
+    display: flex; align-items: flex-start; justify-content: space-between;
+    padding: 14px 20px 8px; gap: 16px;
+  }
+  .field-meta { flex: 1; }
+  .field-label { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 2px; }
+  .field-sebi { font-size: 11px; color: var(--muted); font-style: italic; margin-bottom: 4px; }
+  .field-unit { font-size: 11px; color: var(--accent); font-weight: 500; }
+
+  .field-status {
+    display: flex; align-items: center; gap: 6px; flex-shrink: 0;
+    padding: 4px 10px; border-radius: 5px; border: 1px solid var(--border);
+    background: var(--bg); font-size: 12px; color: var(--label); cursor: pointer;
+  }
+  .field-status select {
+    border: none; background: none; font-size: 12px;
+    color: var(--label); cursor: pointer; outline: none; padding: 0;
+  }
+
+  .field-inputs { padding: 0 20px 14px; }
+
+  /* ── YEAR GRID ── */
+  .year-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+  }
+  .year-col label {
+    display: block; font-size: 11px; font-weight: 600;
+    color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px;
+    margin-bottom: 5px;
+  }
+  .year-col input[type="number"], .year-col input[type="text"] {
+    width: 100%; padding: 8px 10px; border: 1px solid var(--border);
+    border-radius: 5px; font-size: 13px; color: var(--text);
+    background: #fff; transition: border-color 0.15s;
+  }
+  .year-col input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
+
+  /* ── TEXT / TEXTAREA INPUTS ── */
+  .field-inputs input[type="text"].full,
+  .field-inputs textarea {
+    width: 100%; padding: 8px 10px; border: 1px solid var(--border);
+    border-radius: 5px; font-size: 13px; color: var(--text);
+    background: #fff; resize: vertical;
+  }
+  .field-inputs input[type="text"].full:focus,
+  .field-inputs textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
+  .field-inputs select.full {
+    width: 100%; padding: 8px 10px; border: 1px solid var(--border);
+    border-radius: 5px; font-size: 13px; color: var(--text); background: #fff;
+  }
+  .field-inputs select.full:focus { outline: none; border-color: var(--accent); }
+
+  /* ── NA PANEL ── */
+  .na-panel {
+    display: none; margin: 0 20px 14px;
+    background: var(--orange-light); border: 1px solid #fcd34d;
+    border-radius: 5px; padding: 10px 12px;
+  }
+  .na-panel label { font-size: 12px; font-weight: 600; color: var(--orange); display: block; margin-bottom: 6px; }
+  .na-panel textarea {
+    width: 100%; padding: 6px 8px; border: 1px solid #fcd34d;
+    border-radius: 4px; font-size: 12px; color: var(--text);
+    background: #fff; resize: vertical; min-height: 56px;
+  }
+  .na-panel textarea:focus { outline: none; border-color: var(--orange); }
+
+  /* ── BREAKOUT SUB-FIELDS ── */
+  .sub-fields { padding: 0 20px 14px; }
+  .sub-fields .sub-label { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; margin-top: 10px; }
+  .sub-row { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+  .sub-row span { flex: 1; font-size: 12px; color: var(--label); }
+  .sub-row input { width: 140px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 5px; font-size: 12px; }
+  .sub-row input:focus { outline: none; border-color: var(--accent); }
+
+  /* ── INLINE 2-COL ── */
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .three-col { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+  .form-field { margin-bottom: 14px; }
+  .form-field label { display: block; font-size: 12px; font-weight: 600; color: var(--label); margin-bottom: 5px; }
+  .form-field input, .form-field select, .form-field textarea {
+    width: 100%; padding: 8px 10px; border: 1px solid var(--border);
+    border-radius: 5px; font-size: 13px; color: var(--text); background: #fff;
+  }
+  .form-field input:focus, .form-field select:focus, .form-field textarea:focus {
+    outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(37,99,235,0.1);
+  }
+  .form-field .hint { font-size: 11px; color: var(--muted); margin-top: 3px; }
+  .form-section-pad { padding: 20px; }
+
+  /* ── DIVIDER ── */
+  .divider { height: 1px; background: var(--border); margin: 0 20px; }
+
+  /* ── SUBMIT FOOTER ── */
+  .submit-footer {
+    margin-top: 32px; padding: 20px 24px;
+    background: #fff; border: 1px solid var(--border);
+    border-radius: var(--radius); box-shadow: var(--shadow);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .submit-footer p { font-size: 13px; color: var(--muted); }
+  .submit-footer strong { color: var(--text); }
+
+  .req { color: var(--red); }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-logo">BRSR Core <span>Report Generator</span></div>
+  <div class="topbar-actions">
+    <button class="btn btn-outline" type="button" onclick="window.scrollTo(0,0)">Back to top</button>
+    <button class="btn btn-primary" type="submit" form="brsr-form">Generate Report →</button>
+  </div>
+</div>
+
+<div class="layout">
+
+  <!-- SIDEBAR -->
+  <nav class="sidebar">
+    <div class="sidebar-section">
+      <div class="sidebar-label">Setup</div>
+      <a href="#sec-general">Company Details</a>
+      <a href="#sec-mgmt">Governance Setup</a>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-label">BRSR Core KPIs</div>
+      <a href="#attr-ghg">1 · GHG Footprint</a>
+      <a href="#attr-water">2 · Water</a>
+      <a href="#attr-energy">3 · Energy</a>
+      <a href="#attr-waste">4 · Waste</a>
+      <a href="#attr-safety">5 · Safety</a>
+      <a href="#attr-gender">6 · Gender Diversity</a>
+      <a href="#attr-inclusive">7 · Inclusive Dev</a>
+      <a href="#attr-fairness">8 · Customers / Suppliers</a>
+      <a href="#attr-openness">9 · Business Openness</a>
+    </div>
+  </nav>
+
+  <!-- MAIN -->
+  <main class="main">
+    <div class="page-title">BRSR Core Report Input Form</div>
+    <div class="page-sub">Fill in all fields you have data for. For any field where data is missing or not applicable, use the status dropdown — the AI will generate appropriate regulatory language.</div>
+
+    <form id="brsr-form" method="POST" action="/generate">
+
+      <!-- ═══════════════════════════════════════════
+           SECTION A — COMPANY DETAILS
+      ══════════════════════════════════════════════ -->
+      <div class="section" id="sec-general">
+        <div class="section-header attr-general">
+          <span class="section-badge">Section A</span>
+          <span class="section-title">General Disclosures</span>
+          <span class="section-desc">Company identity &amp; reporting boundary</span>
+        </div>
+        <div class="section-body">
+          <div class="form-section-pad">
+            <div class="two-col">
+              <div class="form-field">
+                <label>Company Name <span class="req">*</span></label>
+                <input type="text" name="company_name" placeholder="e.g. Tata Chemicals Limited" required>
+              </div>
+              <div class="form-field">
+                <label>CIN <span class="req">*</span></label>
+                <input type="text" name="cin" placeholder="e.g. L24239MH1939PLC002893">
+              </div>
+            </div>
+            <div class="three-col">
+              <div class="form-field">
+                <label>Reporting Financial Year <span class="req">*</span></label>
+                <select name="financial_year" required>
+                  <option value="">Select FY</option>
+                  <option value="FY 2024-25">FY 2024-25</option>
+                  <option value="FY 2023-24">FY 2023-24</option>
+                  <option value="FY 2022-23">FY 2022-23</option>
+                </select>
+              </div>
+              <div class="form-field">
+                <label>Previous Financial Year</label>
+                <select name="prev_financial_year">
+                  <option value="">Auto (one year prior)</option>
+                  <option value="FY 2023-24">FY 2023-24</option>
+                  <option value="FY 2022-23">FY 2022-23</option>
+                  <option value="FY 2021-22">FY 2021-22</option>
+                </select>
+              </div>
+              <div class="form-field">
+                <label>Sector / Industry</label>
+                <select name="sector">
+                  <option value="">Select sector</option>
+                  <option>Manufacturing — Chemicals</option>
+                  <option>Manufacturing — Metals &amp; Mining</option>
+                  <option>Manufacturing — Pharma</option>
+                  <option>Manufacturing — FMCG</option>
+                  <option>Manufacturing — Auto &amp; Auto Components</option>
+                  <option>Manufacturing — Other</option>
+                  <option>IT / Software Services</option>
+                  <option>BFSI — Banking</option>
+                  <option>BFSI — Insurance</option>
+                  <option>BFSI — NBFC</option>
+                  <option>Energy — Power Generation</option>
+                  <option>Energy — Oil &amp; Gas</option>
+                  <option>Infrastructure / Construction</option>
+                  <option>Logistics &amp; Transport</option>
+                  <option>Retail / Consumer</option>
+                  <option>Healthcare &amp; Hospitals</option>
+                  <option>Telecom</option>
+                  <option>Other</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-field">
+              <label>Registered Address</label>
+              <input type="text" name="registered_address" placeholder="Full registered address">
+            </div>
+            <div class="two-col">
+              <div class="form-field">
+                <label>Revenue from Operations — Current Year (INR crore) <span class="req">*</span></label>
+                <input type="number" name="revenue_current" placeholder="e.g. 14887" step="0.01" required>
+                <div class="hint">Used as denominator for all intensity KPIs</div>
+              </div>
+              <div class="form-field">
+                <label>Revenue from Operations — Previous Year (INR crore)</label>
+                <input type="number" name="revenue_prev" placeholder="e.g. 13950" step="0.01">
+              </div>
+            </div>
+
+            <div class="divider" style="margin: 4px 0 16px;"></div>
+            <div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:12px;">Workforce (for Section A tables)</div>
+
+            <div class="two-col">
+              <div>
+                <div style="font-size:12px;font-weight:600;color:var(--label);margin-bottom:8px;">Permanent Employees</div>
+                <div class="sub-row"><span>Male</span><input type="number" name="perm_emp_male" placeholder="Count"></div>
+                <div class="sub-row"><span>Female</span><input type="number" name="perm_emp_female" placeholder="Count"></div>
+              </div>
+              <div>
+                <div style="font-size:12px;font-weight:600;color:var(--label);margin-bottom:8px;">Contract / Casual Workers</div>
+                <div class="sub-row"><span>Male</span><input type="number" name="contract_workers_male" placeholder="Count"></div>
+                <div class="sub-row"><span>Female</span><input type="number" name="contract_workers_female" placeholder="Count"></div>
+              </div>
+            </div>
+
+            <div class="divider" style="margin: 16px 0;"></div>
+            <div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:12px;">Director Responsible for BRSR</div>
+            <div class="three-col">
+              <div class="form-field">
+                <label>Director Name</label>
+                <input type="text" name="director_name" placeholder="Full name">
+              </div>
+              <div class="form-field">
+                <label>DIN</label>
+                <input type="text" name="director_din" placeholder="8-digit DIN">
+              </div>
+              <div class="form-field">
+                <label>Designation</label>
+                <input type="text" name="director_designation" placeholder="e.g. Managing Director">
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════
+           SECTION B — MANAGEMENT & GOVERNANCE
+      ══════════════════════════════════════════════ -->
+      <div class="section" id="sec-mgmt">
+        <div class="section-header attr-mgmt">
+          <span class="section-badge">Section B</span>
+          <span class="section-title">Management &amp; Process Disclosures</span>
+          <span class="section-desc">Policies, committees, grievance mechanisms</span>
+        </div>
+        <div class="section-body">
+          <div class="form-section-pad">
+            <div class="two-col">
+              <div class="form-field">
+                <label>Code of Conduct — Name of Policy</label>
+                <input type="text" name="code_of_conduct_name" placeholder="e.g. Code of Business Conduct &amp; Ethics">
+              </div>
+              <div class="form-field">
+                <label>Board Approval Date</label>
+                <input type="text" name="code_of_conduct_date" placeholder="e.g. April 15, 2019">
+              </div>
+            </div>
+            <div class="two-col">
+              <div class="form-field">
+                <label>% Employees Trained on CoC (Current Year)</label>
+                <input type="number" name="coc_training_pct" placeholder="e.g. 100" min="0" max="100" step="0.1">
+              </div>
+              <div class="form-field">
+                <label>CoC Violations Reported (Current Year)</label>
+                <input type="number" name="coc_violations" placeholder="e.g. 0">
+              </div>
+            </div>
+            <div class="two-col">
+              <div class="form-field">
+                <label>ESG / Sustainability Committee Name</label>
+                <input type="text" name="esg_committee_name" placeholder="e.g. Safety, Health, Environment &amp; Sustainability Committee">
+              </div>
+              <div class="form-field">
+                <label>Committee Review Frequency</label>
+                <select name="esg_committee_frequency">
+                  <option value="">Select</option>
+                  <option>Quarterly</option>
+                  <option>Half-yearly</option>
+                  <option>Annually</option>
+                  <option>As needed</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-field">
+              <label>Whistleblower / Vigil Mechanism — Oversight Body</label>
+              <input type="text" name="whistleblower_oversight" placeholder="e.g. Audit Committee, Chair: [Name]">
+            </div>
+            <div class="two-col">
+              <div class="form-field">
+                <label>Whistleblower Complaints Received (Current Year)</label>
+                <input type="number" name="whistleblower_received" placeholder="e.g. 3">
+              </div>
+              <div class="form-field">
+                <label>Whistleblower Complaints Resolved (Current Year)</label>
+                <input type="number" name="whistleblower_resolved" placeholder="e.g. 3">
+              </div>
+            </div>
+            <div class="form-field">
+              <label>Environment Policy Name</label>
+              <input type="text" name="env_policy_name" placeholder="e.g. Environmental Management Policy">
+            </div>
+            <div class="form-field">
+              <label>Does the company have a sustainability / science-based emissions target?</label>
+              <textarea name="sustainability_target" rows="2" placeholder="e.g. Reduce Scope 1+2 emissions by 25% by FY 2030 against FY 2020 baseline. Progress: 8% reduction achieved to date."></textarea>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════
+           ATTRIBUTE 1 — GHG FOOTPRINT
+      ══════════════════════════════════════════════ -->
+      <div class="section" id="attr-ghg">
+        <div class="section-header attr-ghg">
+          <span class="section-badge">Attribute 1</span>
+          <span class="section-title">GHG Footprint</span>
+          <span class="section-desc">Scope 1, Scope 2, Intensity</span>
+        </div>
+        <div class="section-body">
+
+          <!-- KPI 1: Scope 1 -->
+          <div class="field-group">
+            <div class="field-header">
+              <div class="field-meta">
+                <div class="field-label">Total Scope 1 Emissions</div>
+                <div class="field-sebi">"Total Scope 1 emissions (Break-up of the GHG into CO2, CH4, N2O, HFCs, PFCs, SF6, NF3, if available)"</div>
+                <div class="field-unit">Unit: Metric tonnes CO₂e</div>
+              </div>
+              <div class="field-status">
+                <select onchange="toggleNA(this,'scope1-na')" name="scope1_status">
+                  <option value="available">Data available</option>
+                  <option value="na">Not applicable</option>
+                  <option value="compiling">Under compilation</option>
+                  <option value="prev_na">Prior year not tracked</option>
+                </select>
+              </div>
+            </div>
+            <div class="field-inputs">
+              <div class="year-grid">
+                <div class="year-col"><label>Current Year</label><input type="number" name="scope1_current" placeholder="e.g. 477000" step="0.01"></div>
+                <div class="year-col"><label>Previous Year</label><input type="number" name="scope1_prev" placeholder="e.g. 459000" step="0.01"></div>
+              </div>
+            </div>
+            <div class="na-panel" id="scope1-na">
+              <label>Context for the AI (explain why / what's being done)</label>
+              <textarea name="scope1_na_context" placeholder="e.g. The Company is a pure-play IT services company without direct combustion processes; Scope 1 emissions arise solely from company-owned vehicle fleet which is currently under metered tracking from FY 2025-26."></textarea>
+            </div>
+            <div class="sub-fields">
+              <div class="sub-label">GHG Break-up by type (optional but strengthens assurance)</div>
+              <div class="sub-row"><span>CO₂ (current year, MT)</span><input type="number" name="scope1_co2" step="0.01" placeholder="MT"></div>
+              <div class="sub-row"><span>CH₄ (current year, MT CO₂e)</span><input type="number" name="scope1_ch4" step="0.01" placeholder="MT CO₂e"></div>
+              <div class="sub-row"><span>N₂O (current year, MT CO₂e)</span><input type="number" name="scope1_n2o" step="0.01" placeholder="MT CO₂e"></div>
+            </div>
+          </div>
+
+          <!-- KPI 2: Scope 2 -->
+          <div class="field-group">
+            <div class="field-header">
+              <div class="field-meta">
+                <div class="field-label">Total Scope 2 Emissions</div>
+                <div class="field-sebi">"Total Scope 2 emissions (Break-up of the GHG into CO2, CH4, N2O, HFCs, PFCs, SF6, NF3, if available)"</div>
+                <div class="field-unit">Unit: Metric tonnes CO₂e</div>
+              </div>
+              <div class="field-status">
+                <select onchange="toggleNA(this,'scope2-na')" name="scope2_status">
+                  <option value="available">Data available</option>
+                  <option value="na">Not applicable</option>
+                  <option value="compiling">Under compilation</option>
+                  <option value="prev_na">Prior year not tracked</option>
+                </select>
+              </div>
+            </div>
+            <div class="field-inputs">
+              <div class="year-grid">
+                <div class="year-col"><label>Current Year</label><input type="number" name="scope2_current" placeholder="e.g. 75534" step="0.01"></div>
+                <div class="year-col"><label>Previous Year</label><input type="number" name="scope2_prev" placeholder="e.g. 71000" step="0.01"></div>
+              </div>
+              <div style="margin-top:10px;">
+                <label style="font-size:12px;color:var(--label);font-weight:600;">Methodology used:</label>
+                <select name="scope2_method" style="margin-left:8px;padding:4px 8px;border:1px solid var(--border);border-radius:4px;font-size:12px;">
+                  <option value="location">Location-based (default)</option>
+                  <option value="market">Market-based</option>
+                  <option value="both">Both</option>
+                </select>
+              </div>
+            </div>
+            <div class="na-panel" id="scope2-na">
+              <label>Context for the AI</label>
+              <textarea name="scope2_na_context" placeholder="Explain why this is not applicable or what data is being compiled..."></textarea>
+            </div>
+          </div>
+
+          <!-- KPI 3: Intensity -->
+          <div class="field-group">
+            <div class="field-header">
+              <div class="field-meta">
+                <div class="field-label">GHG Emission Intensity <span style="font-size:11px;color:var(--green);font-weight:600;">(auto-calculated if Scope 1+2 and revenue are entered)</span></div>
+                <div class="field-sebi">"GHG Emission Intensity per rupee of turnover (Total Scope 1 and Scope 2 in metric tonnes CO₂e per INR crore of turnover)"</div>
+                <div class="field-unit">Unit: Metric tonnes CO₂e per INR crore</div>
+              </div>
+            </div>
+            <div class="field-inputs">
+              <div class="year-grid">
+                <div class="year-col"><label>Current Year (override)</label><input type="number" name="ghg_intensity_current" placeholder="Auto-calculated" step="0.01"></div>
+                <div class="year-col"><label>Previous Year (override)</label><input type="number" name="ghg_intensity_prev" placeholder="Auto-calculated" step="0.01"></div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════
+           ATTRIBUTE 2 — WATER FOOTPRINT
+      ══════════════════════════════════════════════ -->
+      <div class="section" id="attr-water">
+        <div class="section-header attr-water">
+          <span class="section-badge">Attribute 2</span>
+          <span class="section-title">Water Footprint</span>
+          <span class="section-desc">Withdrawal, Consumption, Discharge, Recycling</span>
+        </div>
+        <div class="section-body">
+
+          <!-- KPI 4: Withdrawal -->
+          <div class="field-group">
+            <div class="field-header">
+              <div class="field-meta">
+                <div class="field-label">Total Water Withdrawal (by source)</div>
+                <div class="field-sebi">"Total volume of water withdrawn (break-up by source; distinguish freshwater from other water)"</div>
+                <div class="field-unit">Unit: KL (Kiloliters)</div>
+              </div>
+              <div class="field-status">
+                <select onchange="toggleNA(this,'water-wdraw-na')" name="water_withdrawal_status">
+                  <option value="available">Data available</option>
+                  <option value="na">Not applicable</option>
+                  <option value="compiling">Under compilation</option>
+                  <option value="prev_na">Prior year not tracked</option>
+                </select>
+              </div>
+            </div>
+            <div class="sub-fields">
+              <div class="sub-label">Freshwater (≤1000 mg/L TDS)</div>
+              <div class="sub-row"><span>Surface water (KL)</span><input type="number" name="water_surface_fresh_current" placeholder="Current"></div>
+              <div class="sub-row"><span>Groundwater (KL)</span><input type="number" name="water_ground_fresh_current" placeholder="Current"></div>
+              <div class="sub-row"><span>Third-party water (KL)</span><input type="number" name="water_third_fresh_current" placeholder="Current"></div>
+              <div class="sub-label">Other Water (&gt;1000 mg/L TDS)</div>
+              <div class="sub-row"><span>Seawater (KL)</span><input type="number" name="water_sea_current" placeholder="Current"></div>
+              <div class="sub-row"><span>Other sources (KL)</span><input type="number" name="water_other_current" placeholder="Current"></div>
+              <div class="sub-label">Previous Year — Total Withdrawal</div>
+              <div class="sub-row"><span>Total previous year (KL)</span><input type="number" name="water_withdrawal_prev" placeholder="Previous"></div>
+            </div>
+            <div class="na-panel" id="water-wdraw-na">
+              <label>Context for the AI</label>
+              <textarea name="water_withdrawal_na_context" placeholder="e.g. The Company operates entirely from shared commercial office spaces and does not have metered water withdrawal data at facility level. Water consumption data is under compilation from facility managers."></textarea>
+            </div>
+          </div>
+
+          <!-- KPI 5+6: Consumption & Intensity -->
+          <div class="field-group">
+            <div class="field-header">
+              <div class="field-meta">
+                <div class="field-label">Total Water Consumption &amp; Intensity</div>
+                <div class="field-sebi">"Total volume of water consumed (withdrawal minus discharge); Water consumption intensity per rupee of turnover"</div>
+                <div class="field-unit">Unit: KL | KL per INR crore</div>
+              </div>
+            </div>
+            <div class="field-inputs">
+              <div class="year-grid">
+                <div class="year-col"><label>Water Consumed — Current (KL)</label><input type="number" name="water_consumed_current" placeholder="e.g. 1003000" step="0.01"></div>
+                <div class="year-col"><label>Water Consumed — Previous (KL)</label><input type="number" name="water_consumed_prev" placeholder="e.g. 985000" step="0.01"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- KPI 7: Discharge -->
+          <div class="field-group">
+            <div class="field-header">
+              <div class="field-meta">
+                <div class="field-label">Water Discharge (by destination &amp; treatment level)</div>
+                <div class="field-sebi">"Water discharge by destination and levels of treatment"</div>
+                <div class="field-unit">Unit: KL</div>
+              </div>
+              <div class="field-status">
+                <select onchange="toggleNA(this,'water-discharge-na')" name="water_discharge_status">
+                  <option value="available">Data available</option>
+                  <option value="na">Not applicable</option>
+                  <option value="compiling">Under compilation</option>
+                </select>
+              </div>
+            </div>
+            <div class="sub-fields">
+              <div class="sub-row"><span>Surface water discharge (KL, current)</span><input type="number" name="water_disch_surface" placeholder="KL"></div>
+              <div class="sub-row"><span>Groundwater discharge (KL, current)</span><input type="number" name="water_disch_ground" placeholder="KL"></div>
+              <div class="sub-row"><span>Third-party / CETP (KL, current)</span><input type="number" name="water_disch_third" placeholder="KL"></div>
+              <div class="sub-row"><span>Treatment level for primary discharge</span>
+                <select name="water_disch_treatment" style="width:140px;padding:6px 8px;border:1px solid var(--border);border-radius:5px;font-size:12px;">
+                  <option value="">Select</option>
+                  <option>Tertiary</option><option>Secondary</option><option>Primary</option><option>Untreated</option>
+                </select>
+              </div>
+            </div>
+            <div class="na-panel" id="water-discharge-na">
+              <label>Context for the AI</label>
+              <textarea name="water_discharge_na_context"></textarea>
+            </div>
+          </div>
+
+          <!-- KPI 8: Recycled -->
+          <div class="field-group">
+            <div class="field-header">
+              <div class="field-meta">
+                <div class="field-label">Water Recycled and Reused</div>
+                <div class="field-sebi">"Total water recycled and reused within the entity as a percentage of total water withdrawal"</div>
+                <div class="field-unit">Unit: KL and %</div>
+              </div>
+            </div>
+            <div class="field-inputs">
+              <div class="year-grid">
+                <div class="year-col"><label>Volume Recycled — Current (KL)</label><input type="number" name="water_recycled_current" step="0.01"></div>
+                <div class="year-col"><label>Volume Recycled — Previous (KL)</label><input type="number" name="water_recycled_prev" step="0.01"></div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════
+           ATTRIBUTE 3 — ENERGY FOOTPRINT
+      ══════════════════════════════════════════════ -->
+      <div class="section" id="attr-energy">
+        <div class="section-header attr-energy">
+          <span class="section-badge">Attribute 3</span>
+          <span class="section-title">Energy Footprint</span>
+          <span class="section-desc">Non-renewable, Renewable, Intensity</span>
+        </div>
+        <div class="section-body">
+
+          <div class="field-group">
+            <div class="field-header">
+              <div class="field-meta">
+                <div class="field-label">Energy from Non-Renewable Sources</div>
+                <div class="field-sebi">"Total energy consumed from non-renewable sources (fuel, purchased electricity, heat, steam, cooling)"</div>
+                <div class="field-unit">Unit: GJ (Gigajoules) — 1 kWh = 0.0036 GJ</div>
+              </div>
+            </div>
+            <div class="field-inputs">
+              <div class="year-grid">
+                <div class="year-col"><label>Current Year (GJ)</label><input type="number" name="energy_nonrenew_current" step="0.01"></div>
+                <div class="year-col"><label>Previous Year (GJ)</label><input type="number" name="energy_nonrenew_prev" step="0.01"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="field-group">
+            <div class="field-header">
+              <div class="field-meta">
+                <div class="field-label">Energy from Renewable Sources</div>
+                <div class="field-sebi">"Total energy consumed from renewable sources (renewable fuel, purchased renewable electricity, RECs)"</div>
+                <div class="field-unit">Unit: GJ</div>
+              </div>
+            </div>
+            <div class="field-inputs">
+              <div class="year-grid">
+                <div class="year-col"><label>Current Year (GJ)</label><input type="number" name="energy_renew_current" step="0.01"></div>
+                <div class="year-col"><label>Previous Year (GJ)</label><input type="number" name="energy_renew_prev" step="0.01"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="field-group">
+            <div class="field-header">
+              <div class="field-meta">
+                <div class="field-label">Energy Intensity <span style="font-size:11px;color:var(--green);font-weight:600;">(auto-calculated from total energy ÷ revenue)</span></div>
+                <div class="field-sebi">"Energy intensity per rupee of turnover"</div>
+                <div class="field-unit">Unit: GJ per INR crore</div>
+              </div>
+            </div>
+            <div class="field-inputs">
+              <div class="year-grid">
+                <div class="year-col"><label>Current Year (override)</label><input type="number" name="energy_intensity_current" placeholder="Auto-calculated" step="0.01"></div>
+                <div class="year-col"><label>Previous Year (override)</label><input type="number" name="energy_intensity_prev" placeholder="Auto-calculated" step="0.01"></div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════
+           ATTRIBUTE 4 — WASTE / CIRCULARITY
+      ══════════════════════════════════════════════ -->
+      <div class="section" id="attr-waste">
+        <div class="section-header attr-waste">
+          <span class="section-badge">Attribute 4</span>
+          <span class="section-title">Circularity — Waste Management</span>
+          <span class="section-desc">8 waste types · Total · Recovered vs Disposed</span>
+        </div>
+        <div class="section-body">
+
+          <div class="field-group">
+            <div class="field-header">
+              <div class="field-meta">
+                <div class="field-label">Waste Generated (by type, in Metric Tonnes)</div>
+                <div class="field-sebi">Enter current year for each waste category. Mark zero if nil. Leave blank + select "Not applicable" for categories irrelevant to your operations.</div>
+              </div>
+              <div class="field-status">
+                <select onchange="toggleNA(this,'waste-na')" name="waste_status">
+                  <option value="available">Data available</option>
+                  <option value="na">Not applicable</option>
+                  <option value="compiling">Under compilation</option>
+                </select>
+              </div>
+            </div>
+            <div class="sub-fields">
+              <div class="sub-label">Waste Breakdown — Current Year (MT)</div>
+              <div class="sub-row"><span>Plastic waste</span><input type="number" name="waste_plastic" placeholder="MT" step="0.01"></div>
+              <div class="sub-row"><span>E-waste</span><input type="number" name="waste_ewaste" placeholder="MT" step="0.01"></div>
+              <div class="sub-row"><span>Bio-medical waste</span><input type="number" name="waste_biomedical" placeholder="MT (0 if none)" step="0.01"></div>
+              <div class="sub-row"><span>Construction &amp; demolition waste</span><input type="number" name="waste_construction" placeholder="MT" step="0.01"></div>
+              <div class="sub-row"><span>Battery waste</span><input type="number" name="waste_battery" placeholder="MT" step="0.01"></div>
+              <div class="sub-row"><span>Radioactive waste</span><input type="number" name="waste_radioactive" placeholder="MT (0 if none)" step="0.01"></div>
+              <div class="sub-row"><span>Other hazardous waste</span><input type="number" name="waste_other_hazardous" placeholder="MT" step="0.01"></div>
+              <div class="sub-row"><span>Other non-hazardous waste</span><input type="number" name="waste_other_nonhazardous" placeholder="MT" step="0.01"></div>
+              <div class="sub-label">Previous Year — Total Waste Generated</div>
+              <div class="sub-row"><span>Total waste — previous year (MT)</span><input type="number" name="waste_total_prev" placeholder="MT" step="0.01"></div>
+            </div>
+            <div class="na-panel" id="waste-na">
+              <label>Context for the AI</label>
+              <textarea name="waste_na_context" placeholder="e.g. The Company's operations are entirely digital; physical waste is limited to office consumables and IT equipment managed through authorised recyclers. Detailed waste categorisation is under development."></textarea>
+            </div>
+          </div>
+
+          <div class="field-group">
+            <div class="field-header">
+              <div class="field-meta">
+                <div class="field-label">Waste Recovered (Recycling / Reuse / Other Recovery)</div>
+                <div class="field-sebi">"Total waste recovered through recycling, re-using or other recovery operations (with break-up by recovery method)"</div>
+                <div class="field-unit">Unit: MT</div>
+              </div>
+            </div>
+            <div class="sub-fields">
+              <div class="sub-row"><span>Recycled (MT, current)</span><input type="number" name="waste_recycled" step="0.01"></div>
+              <div class="sub-row"><span>Reused (MT, current)</span><input type="number" name="waste_reused" step="0.01"></div>
+              <div class="sub-row"><span>Other recovery (MT, current)</span><input type="number" name="waste_other_recovery" step="0.01"></div>
+              <div class="sub-row"><span>Total recovered — previous year (MT)</span><input type="number" name="waste_recovered_prev" step="0.01"></div>
+            </div>
+          </div>
+
+          <div class="field-group">
+            <div class="field-header">
+              <div class="field-meta">
+                <div class="field-label">Waste Disposed (by method)</div>
+                <div class="field-sebi">"Total waste disposed — incineration (with/without energy recovery), landfill, other disposal"</div>
+                <div class="field-unit">Unit: MT — must equal Total Generated minus Recovered</div>
+              </div>
+            </div>
+            <div class="sub-fields">
+              <div class="sub-row"><span>Incineration with energy recovery (MT)</span><input type="number" name="waste_incineration_energy" step="0.01"></div>
+              <div class="sub-row"><span>Incineration without energy recovery (MT)</span><input type="number" name="waste_incineration_no_energy" step="0.01"></div>
+              <div class="sub-row"><span>Landfill (MT)</span><input type="number" name="waste_landfill" step="0.01"></div>
+              <div class="sub-row"><span>Other disposal (MT)</span><input type="number" name="waste_other_disposal" step="0.01"></div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════
+           ATTRIBUTE 5 — EMPLOYEE WELLBEING & SAFETY
+      ══════════════════════════════════════════════ -->
+      <div class="section" id="attr-safety">
+        <div class="section-header attr-safety">
+          <span class="section-badge">Attribute 5</span>
+          <span class="section-title">Employee Wellbeing &amp; Safety</span>
+          <span class="section-desc">Wellbeing spend · LTIFR · Fatalities</span>
+        </div>
+        <div class="section-body">
+
+          <div class="field-group">
+            <div class="field-header">
+              <div class="field-meta">
+                <div class="field-label">Wellbeing Expenditure — Employees &amp; Workers</div>
+                <div class="field-sebi">"Cost incurred on wellbeing measures as % of total revenue from operations"</div>
+                <div class="field-unit">Unit: % of revenue from operations</div>
+              </div>
+            </div>
+            <div class="field-inputs">
+              <div class="year-grid">
+                <div class="year-col"><label>Employees (Permanent) — Current %</label><input type="number" name="wellbeing_emp_pct_current" step="0.01" min="0" max="100"></div>
+                <div class="year-col"><label>Employees — Previous %</label><input type="number" name="wellbeing_emp_pct_prev" step="0.01" min="0" max="100"></div>
+              </div>
+              <div class="year-grid" style="margin-top:8px;">
+                <div class="year-col"><label>Workers (Contract) — Current %</label><input type="number" name="wellbeing_worker_pct_current" step="0.01" min="0" max="100"></div>
+                <div class="year-col"><label>Workers — Previous %</label><input type="number" name="wellbeing_worker_pct_prev" step="0.01" min="0" max="100"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="field-group">
+            <div class="field-header">
+              <div class="field-meta">
+                <div class="field-label">Safety Incidents — Employees</div>
+                <div class="field-sebi">"LTIFR (per million person-hours worked), fatalities, high consequence injuries, total recordable injuries"</div>
+              </div>
+            </div>
+            <div class="sub-fields">
+              <div class="sub-label">Current Year — Employees</div>
+              <div class="sub-row"><span>LTIFR (per million man-hours)</span><input type="number" name="ltifr_emp_current" step="0.01" placeholder="e.g. 1.53"></div>
+              <div class="sub-row"><span>Total man-hours worked (millions)</span><input type="number" name="manhours_emp_current" step="0.001" placeholder="e.g. 45.2"></div>
+              <div class="sub-row"><span>Fatalities</span><input type="number" name="fatalities_emp_current" placeholder="0"></div>
+              <div class="sub-row"><span>High consequence injuries (excl. fatalities)</span><input type="number" name="highconsequence_emp_current" placeholder="0"></div>
+              <div class="sub-row"><span>Total recordable injuries</span><input type="number" name="recordable_emp_current" placeholder="0"></div>
+              <div class="sub-label">Previous Year — Employees (summary)</div>
+              <div class="sub-row"><span>LTIFR previous year</span><input type="number" name="ltifr_emp_prev" step="0.01"></div>
+              <div class="sub-row"><span>Fatalities previous year</span><input type="number" name="fatalities_emp_prev" placeholder="0"></div>
+            </div>
+          </div>
+
+          <div class="field-group">
+            <div class="field-header">
+              <div class="field-meta">
+                <div class="field-label">Safety Incidents — Workers (Contract / Casual)</div>
+                <div class="field-sebi">"LTIFR, fatalities, high consequence injuries, total recordable injuries for contractual workers"</div>
+              </div>
+            </div>
+            <div class="sub-fields">
+              <div class="sub-label">Current Year — Workers</div>
+              <div class="sub-row"><span>LTIFR (per million man-hours)</span><input type="number" name="ltifr_worker_current" step="0.01" placeholder="e.g. 0.54"></div>
+              <div class="sub-row"><span>Fatalities</span><input type="number" name="fatalities_worker_current" placeholder="0"></div>
+              <div class="sub-row"><span>High consequence injuries</span><input type="number" name="highconsequence_worker_current" placeholder="0"></div>
+              <div class="sub-row"><span>Total recordable injuries</span><input type="number" name="recordable_worker_current" placeholder="0"></div>
+              <div class="sub-label">Previous Year — Workers</div>
+              <div class="sub-row"><span>LTIFR previous year</span><input type="number" name="ltifr_worker_prev" step="0.01"></div>
+              <div class="sub-row"><span>Fatalities previous year</span><input type="number" name="fatalities_worker_prev" placeholder="0"></div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════
+           ATTRIBUTE 6 — GENDER DIVERSITY
+      ══════════════════════════════════════════════ -->
+      <div class="section" id="attr-gender">
+        <div class="section-header attr-gender">
+          <span class="section-badge">Attribute 6</span>
+          <span class="section-title">Gender Diversity</span>
+          <span class="section-desc">Gross wages to females · POSH complaints</span>
+        </div>
+        <div class="section-body">
+
+          <div class="field-group">
+            <div class="field-header">
+              <div class="field-meta">
+                <div class="field-label">Gross Wages Paid to Females</div>
+                <div class="field-sebi">"Gross wages paid to females as a % of total wages paid to all employees"</div>
+                <div class="field-unit">Unit: % of total gross wages</div>
+              </div>
+            </div>
+            <div class="field-inputs">
+              <div class="year-grid">
+                <div class="year-col"><label>Current Year (%)</label><input type="number" name="female_wages_pct_current" step="0.01" min="0" max="100" placeholder="e.g. 28.34"></div>
+                <div class="year-col"><label>Previous Year (%)</label><input type="number" name="female_wages_pct_prev" step="0.01" min="0" max="100"></div>
+              </div>
+              <div style="margin-top:10px;">
+                <label style="font-size:12px;color:var(--label);font-weight:600;">Definition of wages used:</label>
+                <input type="text" name="wages_definition" style="width:340px;margin-left:8px;padding:5px 8px;border:1px solid var(--border);border-radius:4px;font-size:12px;" placeholder="e.g. Base salary + allowances + variable pay, excluding ESOP">
+              </div>
+            </div>
+          </div>
+
+          <div class="field-group">
+            <div class="field-header">
+              <div class="field-meta">
+                <div class="field-label">POSH Complaints</div>
+                <div class="field-sebi">"Number of complaints on sexual harassment received during the year; number pending at year end (POSH Act)"</div>
+                <div class="field-unit">Unit: Absolute count</div>
+              </div>
+            </div>
+            <div class="field-inputs">
+              <div class="year-grid">
+                <div class="year-col"><label>Complaints Filed — Current Year</label><input type="number" name="posh_filed_current" placeholder="0"></div>
+                <div class="year-col"><label>Complaints Filed — Previous Year</label><input type="number" name="posh_filed_prev" placeholder="0"></div>
+              </div>
+              <div class="year-grid" style="margin-top:8px;">
+                <div class="year-col"><label>Complaints Pending at Year-End — Current</label><input type="number" name="posh_pending_current" placeholder="0"></div>
+                <div class="year-col"><label>Complaints Pending — Previous</label><input type="number" name="posh_pending_prev" placeholder="0"></div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════
+           ATTRIBUTE 7 — INCLUSIVE DEVELOPMENT
+      ══════════════════════════════════════════════ -->
+      <div class="section" id="attr-inclusive">
+        <div class="section-header attr-inclusive">
+          <span class="section-badge">Attribute 7</span>
+          <span class="section-title">Inclusive Development</span>
+          <span class="section-desc">MSME sourcing · Domestic sourcing · Smaller-town jobs</span>
+        </div>
+        <div class="section-body">
+
+          <div class="field-group">
+            <div class="field-header">
+              <div class="field-meta">
+                <div class="field-label">Input Sourced from MSMEs / Small Producers</div>
+                <div class="field-sebi">"Input material sourced from MSMEs/small producers as a % of total purchases (by value)"</div>
+                <div class="field-unit">Unit: % of total purchases by value</div>
+              </div>
+              <div class="field-status">
+                <select onchange="toggleNA(this,'msme-na')" name="msme_status">
+                  <option value="available">Data available</option>
+                  <option value="na">Not applicable</option>
+                  <option value="compiling">Under compilation</option>
+                </select>
+              </div>
+            </div>
+            <div class="field-inputs">
+              <div class="year-grid">
+                <div class="year-col"><label>Current Year (%)</label><input type="number" name="msme_pct_current" step="0.01" min="0" max="100"></div>
+                <div class="year-col"><label>Previous Year (%)</label><input type="number" name="msme_pct_prev" step="0.01" min="0" max="100"></div>
+              </div>
+            </div>
+            <div class="na-panel" id="msme-na">
+              <label>Context for the AI</label>
+              <textarea name="msme_na_context" placeholder="e.g. The Company is a services business and does not procure physical input materials; this KPI is not material to its operations."></textarea>
+            </div>
+          </div>
+
+          <div class="field-group">
+            <div class="field-header">
+              <div class="field-meta">
+                <div class="field-label">Input Sourced from Within India</div>
+                <div class="field-sebi">"Input material sourced from within India as a % of total purchases (by value)"</div>
+                <div class="field-unit">Unit: % of total purchases by value</div>
+              </div>
+              <div class="field-status">
+                <select onchange="toggleNA(this,'india-sourcing-na')" name="india_sourcing_status">
+                  <option value="available">Data available</option>
+                  <option value="na">Not applicable</option>
+                  <option value="compiling">Under compilation</option>
+                </select>
+              </div>
+            </div>
+            <div class="field-inputs">
+              <div class="year-grid">
+                <div class="year-col"><label>Current Year (%)</label><input type="number" name="india_sourcing_pct_current" step="0.01" min="0" max="100"></div>
+                <div class="year-col"><label>Previous Year (%)</label><input type="number" name="india_sourcing_pct_prev" step="0.01" min="0" max="100"></div>
+              </div>
+            </div>
+            <div class="na-panel" id="india-sourcing-na">
+              <label>Context for the AI</label>
+              <textarea name="india_sourcing_na_context"></textarea>
+            </div>
+          </div>
+
+          <div class="field-group">
+            <div class="field-header">
+              <div class="field-meta">
+                <div class="field-label">Job Creation in Smaller Towns</div>
+                <div class="field-sebi">"Wages paid to persons employed in aspirational districts/smaller cities as a % of total wage cost"</div>
+                <div class="field-unit">Unit: % of total wage cost</div>
+              </div>
+              <div class="field-status">
+                <select onchange="toggleNA(this,'smaller-towns-na')" name="smaller_towns_status">
+                  <option value="available">Data available</option>
+                  <option value="na">Not applicable</option>
+                  <option value="compiling">Under compilation</option>
+                </select>
+              </div>
+            </div>
+            <div class="field-inputs">
+              <div class="year-grid">
+                <div class="year-col"><label>Current Year (%)</label><input type="number" name="smaller_towns_pct_current" step="0.01" min="0" max="100"></div>
+                <div class="year-col"><label>Previous Year (%)</label><input type="number" name="smaller_towns_pct_prev" step="0.01" min="0" max="100"></div>
+              </div>
+              <div style="margin-top:10px;">
+                <label style="font-size:12px;color:var(--label);font-weight:600;">Classification used for "smaller towns":</label>
+                <input type="text" name="smaller_towns_classification" style="width:340px;margin-left:8px;padding:5px 8px;border:1px solid var(--border);border-radius:4px;font-size:12px;" placeholder="e.g. DPIIT Aspirational Districts + Tier-2/Tier-3 per Census 2011">
+              </div>
+            </div>
+            <div class="na-panel" id="smaller-towns-na">
+              <label>Context for the AI</label>
+              <textarea name="smaller_towns_na_context"></textarea>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════
+           ATTRIBUTE 8 — FAIRNESS WITH CUSTOMERS/SUPPLIERS
+      ══════════════════════════════════════════════ -->
+      <div class="section" id="attr-fairness">
+        <div class="section-header attr-fairness">
+          <span class="section-badge">Attribute 8</span>
+          <span class="section-title">Fairness with Customers &amp; Suppliers</span>
+          <span class="section-desc">Data breaches · Accounts payable days</span>
+        </div>
+        <div class="section-body">
+
+          <div class="field-group">
+            <div class="field-header">
+              <div class="field-meta">
+                <div class="field-label">Customer Data Breach / Privacy Loss Incidents</div>
+                <div class="field-sebi">"Number of instances involving loss/breach of customer data and as % of total cybersecurity events"</div>
+                <div class="field-unit">Unit: Absolute count and %</div>
+              </div>
+            </div>
+            <div class="field-inputs">
+              <div class="year-grid">
+                <div class="year-col"><label>Breach Incidents — Current Year (count)</label><input type="number" name="data_breach_count_current" placeholder="0"></div>
+                <div class="year-col"><label>Breach Incidents — Previous Year (count)</label><input type="number" name="data_breach_count_prev" placeholder="0"></div>
+              </div>
+              <div class="year-grid" style="margin-top:8px;">
+                <div class="year-col"><label>As % of total cybersecurity events — Current</label><input type="number" name="data_breach_pct_current" step="0.01" placeholder="e.g. 0.00"></div>
+                <div class="year-col"><label>Total cybersecurity events — Current</label><input type="number" name="total_cyber_events" placeholder="Total incidents reported"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="field-group">
+            <div class="field-header">
+              <div class="field-meta">
+                <div class="field-label">Days Payable Outstanding (Accounts Payable Days)</div>
+                <div class="field-sebi">"Number of days of accounts payable (trade payables / total purchases × 365)"</div>
+                <div class="field-unit">Unit: Days</div>
+              </div>
+            </div>
+            <div class="field-inputs">
+              <div class="year-grid">
+                <div class="year-col"><label>Current Year (days)</label><input type="number" name="ap_days_current" step="0.1" placeholder="e.g. 45"></div>
+                <div class="year-col"><label>Previous Year (days)</label><input type="number" name="ap_days_prev" step="0.1"></div>
+              </div>
+              <div style="margin-top:10px;">
+                <label style="font-size:12px;color:var(--label);font-weight:600;">Formula used:</label>
+                <input type="text" name="ap_days_formula" style="width:380px;margin-left:8px;padding:5px 8px;border:1px solid var(--border);border-radius:4px;font-size:12px;" placeholder="e.g. Year-end trade payables / Total purchases × 365">
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════
+           ATTRIBUTE 9 — BUSINESS OPENNESS
+      ══════════════════════════════════════════════ -->
+      <div class="section" id="attr-openness">
+        <div class="section-header attr-openness">
+          <span class="section-badge">Attribute 9</span>
+          <span class="section-title">Business Openness</span>
+          <span class="section-desc">Purchase/sales concentration · Related party transactions</span>
+        </div>
+        <div class="section-body">
+
+          <div class="field-group">
+            <div class="field-header">
+              <div class="field-meta">
+                <div class="field-label">Concentration of Purchases</div>
+                <div class="field-sebi">"Purchases from top 10 trading houses / dealers / related parties as % of total purchases (by value)"</div>
+                <div class="field-unit">Unit: %</div>
+              </div>
+            </div>
+            <div class="field-inputs">
+              <div class="year-grid">
+                <div class="year-col"><label>Current Year (%)</label><input type="number" name="purchase_concentration_current" step="0.01" min="0" max="100"></div>
+                <div class="year-col"><label>Previous Year (%)</label><input type="number" name="purchase_concentration_prev" step="0.01" min="0" max="100"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="field-group">
+            <div class="field-header">
+              <div class="field-meta">
+                <div class="field-label">Concentration of Sales</div>
+                <div class="field-sebi">"Sales to top 10 customers as % of total revenue from operations"</div>
+                <div class="field-unit">Unit: %</div>
+              </div>
+            </div>
+            <div class="field-inputs">
+              <div class="year-grid">
+                <div class="year-col"><label>Current Year (%)</label><input type="number" name="sales_concentration_current" step="0.01" min="0" max="100"></div>
+                <div class="year-col"><label>Previous Year (%)</label><input type="number" name="sales_concentration_prev" step="0.01" min="0" max="100"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="field-group">
+            <div class="field-header">
+              <div class="field-meta">
+                <div class="field-label">Related Party Transactions — Purchases &amp; Sales</div>
+                <div class="field-sebi">"Value of purchases from / sales to related parties as % of total purchases / total revenue"</div>
+                <div class="field-unit">Unit: %</div>
+              </div>
+            </div>
+            <div class="field-inputs">
+              <div class="year-grid">
+                <div class="year-col"><label>RPT Purchases — Current Year (%)</label><input type="number" name="rpt_purchases_pct_current" step="0.01" min="0" max="100"></div>
+                <div class="year-col"><label>RPT Purchases — Previous Year (%)</label><input type="number" name="rpt_purchases_pct_prev" step="0.01" min="0" max="100"></div>
+              </div>
+              <div class="year-grid" style="margin-top:8px;">
+                <div class="year-col"><label>RPT Sales — Current Year (%)</label><input type="number" name="rpt_sales_pct_current" step="0.01" min="0" max="100"></div>
+                <div class="year-col"><label>RPT Sales — Previous Year (%)</label><input type="number" name="rpt_sales_pct_prev" step="0.01" min="0" max="100"></div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- SUBMIT -->
+      <div class="submit-footer">
+        <p><strong>All BRSR Core KPIs covered.</strong> Fields left blank will be handled by the AI using regulatory-grade placeholder language. You can edit the output before filing.</p>
+        <button type="submit" class="btn btn-primary" style="font-size:15px;padding:10px 28px;">Generate BRSR Core Report →</button>
+      </div>
+
+    </form>
+  </main>
+</div>
+
+<script>
+  function toggleNA(select, panelId) {
+    const panel = document.getElementById(panelId);
+    if (!panel) return;
+    const status = select.value;
+    if (status === 'available') {
+      panel.style.display = 'none';
+    } else {
+      panel.style.display = 'block';
+      const label = panel.querySelector('label');
+      if (status === 'na')        label.textContent = 'Explain why this is not applicable to your business:';
+      if (status === 'compiling') label.textContent = 'What data is available now, and when will full data be ready?';
+      if (status === 'prev_na')   label.textContent = 'Context (optional — AI will note prior year was not tracked):';
+    }
+  }
+</script>
+
+</body>
+</html>
