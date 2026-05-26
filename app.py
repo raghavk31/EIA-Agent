@@ -1,7 +1,73 @@
 import json
-from flask import Flask, request, jsonify, send_file
+import os
+from dotenv import load_dotenv
+from openai import OpenAI
+from flask import Flask, request, send_file, Response
+
+load_dotenv()
 
 app = Flask(__name__)
+
+
+def get_client():
+    key = os.environ.get("OPENROUTER_API_KEY")
+    if not key:
+        raise RuntimeError("OPENROUTER_API_KEY is not set. Add it to your .env file.")
+    return OpenAI(base_url="https://openrouter.ai/api/v1", api_key=key)
+
+
+def load_system_prompt():
+    with open("system_prompt_v1.md", encoding="utf-8") as f:
+        raw = f.read()
+    # Strip the markdown code-fence wrapper — content lives between first ``` and last ```
+    start = raw.find("```\n") + 4
+    end = raw.rfind("\n```")
+    return raw[start:end].strip()
+
+
+SYSTEM_PROMPT = load_system_prompt()
+
+
+def build_user_message(data: dict) -> str:
+    company = data.get("company", {})
+    fy      = company.get("financial_year") or "the current financial year"
+    prev_fy = company.get("prev_financial_year") or "previous year"
+    name    = company.get("name") or "[Company Name]"
+
+    return f"""Generate a complete BRSR Core disclosure report for {name} for {fy}.
+
+Apply every rule from your instructions:
+- Formal Indian corporate English, third person throughout
+- All quantitative tables: two columns — {fy} | {prev_fy}
+- Intensity metrics: footnote with the revenue denominator (INR crore)
+- Missing fields: apply the correct Pattern (A zero / B not-applicable / C compiling / D prior-year) based on each field's "status" value
+- Governance responses: named body + quantified input + quantified outcome (or labelled placeholder)
+- Run the 10-point self-check before finalising
+
+COMPANY DATA:
+{json.dumps(data, indent=2, ensure_ascii=False)}
+
+Output the complete report in Markdown. Structure exactly:
+# BUSINESS RESPONSIBILITY AND SUSTAINABILITY REPORT
+## SECTION A: GENERAL DISCLOSURES
+## SECTION B: MANAGEMENT AND PROCESS DISCLOSURES
+## SECTION C: PRINCIPLE-WISE PERFORMANCE DISCLOSURES
+### Principle 1 … through Principle 9 (Essential Indicators for each)
+## BRSR CORE — KPI INDEX
+"""
+
+
+def call_claude(data: dict) -> str:
+    model = os.environ.get("OPENROUTER_MODEL", "anthropic/claude-sonnet-4-5")
+    response = get_client().chat.completions.create(
+        model=model,
+        max_tokens=16000,
+        messages=[
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user",   "content": build_user_message(data)},
+        ],
+    )
+    return response.choices[0].message.content
 
 
 @app.route("/")
@@ -307,12 +373,8 @@ def generate():
         },
     }
 
-    # ── Temporary: pretty-print the dict so we can verify the plumbing ───
-    return app.response_class(
-        response=json.dumps(data, indent=2, ensure_ascii=False),
-        status=200,
-        mimetype="application/json",
-    )
+    draft = call_claude(data)
+    return Response(draft, status=200, mimetype="text/plain; charset=utf-8")
 
 
 if __name__ == "__main__":

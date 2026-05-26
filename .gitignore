@@ -15,5 +15,6 @@ env/
 Thumbs.db
 
 # App secrets
+.env
 *.key
 secrets.json
