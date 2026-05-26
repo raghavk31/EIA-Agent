@@ -31,6 +31,14 @@ def load_system_prompt():
 SYSTEM_PROMPT = load_system_prompt()
 
 
+def auto_status(form_status, *check_values):
+    """Downgrade 'available' to 'compiling' when no data was actually provided."""
+    resolved = form_status or "available"
+    if resolved == "available" and all(v is None for v in check_values):
+        return "compiling"
+    return resolved
+
+
 def build_user_message(data: dict) -> str:
     company = data.get("company", {})
     fy      = company.get("financial_year") or "the current financial year"
@@ -39,12 +47,20 @@ def build_user_message(data: dict) -> str:
 
     return f"""Generate a complete BRSR Core disclosure report for {name} for {fy}.
 
+CRITICAL: Use ONLY the numbers in COMPANY DATA below. Do not invent any figure, name, date, or statistic.
+
+Token budget allocation (MUST follow):
+- Section A: ≤200 words, factual only
+- Section B: ≤300 words, policy names and governance structure only
+- Section C: ≤80 words per Principle, cross-reference KPI Index for numbers
+- BRSR Core KPI Index: FULL detail, all 40 KPIs, do not truncate
+
 Apply every rule from your instructions:
 - Formal Indian corporate English, third person throughout
 - All quantitative tables: two columns — {fy} | {prev_fy}
 - Intensity metrics: footnote with the revenue denominator (INR crore)
 - Missing fields: apply the correct Pattern (A zero / B not-applicable / C compiling / D prior-year) based on each field's "status" value
-- Governance responses: named body + quantified input + quantified outcome (or labelled placeholder)
+- Governance responses: named body + quantified input + quantified outcome (or [PLACEHOLDER] if not in data)
 - Run the 10-point self-check before finalising
 
 COMPANY DATA:
@@ -55,7 +71,7 @@ Output the complete report in Markdown. Structure exactly:
 ## SECTION A: GENERAL DISCLOSURES
 ## SECTION B: MANAGEMENT AND PROCESS DISCLOSURES
 ## SECTION C: PRINCIPLE-WISE PERFORMANCE DISCLOSURES
-### Principle 1 … through Principle 9 (Essential Indicators for each)
+### Principle 1 … through Principle 9 (one short paragraph each, cross-reference KPI Index)
 ## BRSR CORE — KPI INDEX
 """
 
@@ -243,6 +259,37 @@ def generate():
     if waste_total is not None and revenue_current:
         waste_intensity = round(waste_total / revenue_current, 4)
 
+    # ── Pre-flight validation ─────────────────────────────────────────────
+    missing = []
+    if not txt("company_name"):
+        missing.append("Company Name")
+    if not txt("financial_year"):
+        missing.append("Financial Year")
+    if revenue_current is None:
+        missing.append("Current Year Revenue (required for all intensity calculations)")
+    if missing:
+        items = "".join(f"<li>{m}</li>" for m in missing)
+        return f"""<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><title>Missing Fields</title>
+<style>body{{font-family:-apple-system,sans-serif;max-width:600px;margin:60px auto;padding:0 24px;color:#1a1d23}}
+h2{{color:#dc2626;margin-bottom:12px}}ul{{margin:12px 0 24px;padding-left:20px;line-height:1.8}}
+a{{display:inline-block;padding:10px 20px;background:#2563eb;color:#fff;border-radius:6px;text-decoration:none;font-weight:500}}
+a:hover{{background:#1d4ed8}}</style></head>
+<body><h2>Cannot generate report — required fields missing</h2>
+<p>Please fill in the following fields before generating:</p>
+<ul>{items}</ul><a href="/">← Back to form</a></body></html>""", 400
+
+    # ── Helpers for auto_status detection ────────────────────────────────
+    _water_sources = [
+        num("water_surface_fresh_current"), num("water_ground_fresh_current"),
+        num("water_third_fresh_current"), num("water_sea_current"), num("water_other_current"),
+    ]
+    _water_any_source = next((v for v in _water_sources if v is not None), None)
+    _discharge_any = next(
+        (v for v in [num("water_disch_surface"), num("water_disch_ground"), num("water_disch_third")]
+         if v is not None), None
+    )
+
     # ── Structured payload ────────────────────────────────────────────────
     data = {
         "company": {
@@ -295,7 +342,7 @@ def generate():
 
             "ghg": {
                 "scope1": {
-                    "status":   txt("scope1_status") or "available",
+                    "status":   auto_status(txt("scope1_status"), scope1),
                     "current":  scope1,
                     "prev":     num("scope1_prev"),
                     "na_context": txt("scope1_na_context"),
@@ -306,7 +353,7 @@ def generate():
                     },
                 },
                 "scope2": {
-                    "status":   txt("scope2_status") or "available",
+                    "status":   auto_status(txt("scope2_status"), scope2),
                     "current":  scope2,
                     "prev":     num("scope2_prev"),
                     "method":   txt("scope2_method") or "location",
@@ -320,7 +367,7 @@ def generate():
 
             "water": {
                 "withdrawal": {
-                    "status":   txt("water_withdrawal_status") or "available",
+                    "status":   auto_status(txt("water_withdrawal_status"), _water_any_source),
                     "sources": {
                         "surface_freshwater":    num("water_surface_fresh_current"),
                         "groundwater_freshwater":num("water_ground_fresh_current"),
@@ -337,7 +384,7 @@ def generate():
                     "intensity": water_intensity,
                 },
                 "discharge": {
-                    "status":    txt("water_discharge_status") or "available",
+                    "status":    auto_status(txt("water_discharge_status"), _discharge_any),
                     "surface":   num("water_disch_surface"),
                     "groundwater": num("water_disch_ground"),
                     "third_party": num("water_disch_third"),
@@ -369,7 +416,7 @@ def generate():
             },
 
             "waste": {
-                "status":        txt("waste_status") or "available",
+                "status":        auto_status(txt("waste_status"), waste_total),
                 "generated": {
                     **waste_types,
                     "total_current":  waste_total,
@@ -433,19 +480,19 @@ def generate():
 
             "inclusive": {
                 "msme_sourcing": {
-                    "status":   txt("msme_status") or "available",
+                    "status":   auto_status(txt("msme_status"), num("msme_pct_current")),
                     "current":  num("msme_pct_current"),
                     "prev":     num("msme_pct_prev"),
                     "na_context": txt("msme_na_context"),
                 },
                 "india_sourcing": {
-                    "status":   txt("india_sourcing_status") or "available",
+                    "status":   auto_status(txt("india_sourcing_status"), num("india_sourcing_pct_current")),
                     "current":  num("india_sourcing_pct_current"),
                     "prev":     num("india_sourcing_pct_prev"),
                     "na_context": txt("india_sourcing_na_context"),
                 },
                 "smaller_towns": {
-                    "status":         txt("smaller_towns_status") or "available",
+                    "status":         auto_status(txt("smaller_towns_status"), num("smaller_towns_pct_current")),
                     "current":        num("smaller_towns_pct_current"),
                     "prev":           num("smaller_towns_pct_prev"),
                     "classification": txt("smaller_towns_classification"),

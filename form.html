@@ -1175,7 +1175,17 @@
 
       <!-- SUBMIT -->
       <div class="submit-footer">
-        <p><strong>All BRSR Core KPIs covered.</strong> Fields left blank will be handled by the AI using regulatory-grade placeholder language. You can edit the output before filing.</p>
+        <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:12px;">
+          <div id="kpi-counter-wrap" style="display:flex;align-items:center;gap:8px;">
+            <span style="font-size:12px;color:var(--muted);font-weight:500;text-transform:uppercase;letter-spacing:0.5px;">KPI data entered</span>
+            <span id="kpi-counter" style="font-size:22px;font-weight:700;color:var(--text);">0</span>
+            <span style="font-size:13px;color:var(--muted);">/ 36</span>
+          </div>
+          <div id="kpi-status-msg" style="font-size:12px;padding:4px 10px;border-radius:20px;background:var(--orange-light);color:var(--orange);font-weight:500;">
+            Fill in your data to reduce placeholder labels
+          </div>
+        </div>
+        <p style="margin-bottom:12px;"><strong>All BRSR Core KPIs covered.</strong> Fields left blank will be marked with [PLACEHOLDER] language in the draft. You can edit before filing.</p>
         <button type="submit" class="btn btn-primary" style="font-size:15px;padding:10px 28px;">Generate BRSR Core Report →</button>
       </div>
 
@@ -1198,6 +1208,73 @@
       if (status === 'prev_na')   label.textContent = 'Context (optional — AI will note prior year was not tracked):';
     }
   }
+
+  // ── KPI Completion Counter ─────────────────────────────────────────────
+  const KPI_FIELDS = [
+    // Attribute 1: GHG
+    'scope1_current', 'scope2_current',
+    // Attribute 2: Water
+    'water_surface_fresh_current', 'water_consumed_current',
+    'water_disch_surface', 'water_recycled_current',
+    // Attribute 3: Energy
+    'energy_nonrenew_current', 'energy_renew_current',
+    // Attribute 4: Waste (generated)
+    'waste_plastic', 'waste_ewaste', 'waste_biomedical', 'waste_construction',
+    'waste_battery', 'waste_radioactive', 'waste_other_hazardous', 'waste_other_nonhazardous',
+    // Attribute 4: Waste (recovered + disposed)
+    'waste_recycled', 'waste_incineration_energy',
+    // Attribute 5: Wellbeing + Safety
+    'wellbeing_emp_pct_current', 'wellbeing_worker_pct_current',
+    'ltifr_emp_current', 'ltifr_worker_current',
+    'fatalities_emp_current', 'fatalities_worker_current',
+    // Attribute 6: Gender
+    'female_wages_pct_current', 'posh_filed_current', 'posh_pending_current',
+    // Attribute 7: Inclusive
+    'msme_pct_current', 'india_sourcing_pct_current', 'smaller_towns_pct_current',
+    // Attribute 8: Fairness
+    'data_breach_count_current', 'ap_days_current',
+    // Attribute 9: Openness
+    'purchase_concentration_current', 'sales_concentration_current',
+    'rpt_purchases_pct_current', 'rpt_sales_pct_current',
+  ];
+
+  function updateKPICounter() {
+    const filled = KPI_FIELDS.filter(name => {
+      const el = document.querySelector(`input[name="${name}"]`);
+      return el && el.value.trim() !== '';
+    }).length;
+
+    const counter = document.getElementById('kpi-counter');
+    const msg     = document.getElementById('kpi-status-msg');
+    if (!counter) return;
+
+    counter.textContent = filled;
+
+    if (filled === 0) {
+      counter.style.color = 'var(--muted)';
+      msg.style.background = 'var(--orange-light)';
+      msg.style.color = 'var(--orange)';
+      msg.textContent = 'Fill in your data to reduce placeholder labels';
+    } else if (filled < 18) {
+      counter.style.color = 'var(--orange)';
+      msg.style.background = 'var(--orange-light)';
+      msg.style.color = 'var(--orange)';
+      msg.textContent = 'Partial data — many KPIs will have placeholder language';
+    } else if (filled < 30) {
+      counter.style.color = '#0369a1';
+      msg.style.background = '#e0f2fe';
+      msg.style.color = '#0369a1';
+      msg.textContent = 'Good coverage — most KPIs have data';
+    } else {
+      counter.style.color = 'var(--green)';
+      msg.style.background = 'var(--green-light)';
+      msg.style.color = 'var(--green)';
+      msg.textContent = 'Excellent — ready to generate';
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', updateKPICounter);
+  document.getElementById('brsr-form').addEventListener('input', updateKPICounter);
 </script>
 
 </body>
