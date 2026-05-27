@@ -117,8 +117,15 @@ def markdown_to_pdf(draft: str, data: dict) -> bytes:
     try:
         from weasyprint import HTML
         return HTML(string=full_html).write_pdf()
-    except Exception:
-        return _pdf_via_xhtml2pdf(html_body, data)
+    except Exception as wp_err:
+        # Fallback for Windows dev where WeasyPrint needs GTK libs.
+        # Install xhtml2pdf manually on Windows: pip install xhtml2pdf
+        try:
+            return _pdf_via_xhtml2pdf(html_body, data)
+        except ImportError:
+            raise RuntimeError(
+                f"WeasyPrint failed ({wp_err}). On Windows, install xhtml2pdf: pip install xhtml2pdf"
+            ) from wp_err
 
 
 def _pdf_via_xhtml2pdf(html_body: str, data: dict) -> bytes:
