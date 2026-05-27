@@ -294,7 +294,7 @@ a:hover{{background:#1d4ed8}}</style></head>
     ]
     _water_any_source = next((v for v in _water_sources if v is not None), None)
     _discharge_any = next(
-        (v for v in [num("water_disch_surface"), num("water_disch_ground"), num("water_disch_third")]
+        (v for v in [num("water_disch_surface"), num("water_disch_ground"), num("water_disch_sea"), num("water_disch_third")]
          if v is not None), None
     )
 
@@ -358,6 +358,9 @@ a:hover{{background:#1d4ed8}}</style></head>
                         "co2":  num("scope1_co2"),
                         "ch4":  num("scope1_ch4"),
                         "n2o":  num("scope1_n2o"),
+                        "co2_prev": num("scope1_co2_prev"),
+                        "ch4_prev": num("scope1_ch4_prev"),
+                        "n2o_prev": num("scope1_n2o_prev"),
                     },
                 },
                 "scope2": {
@@ -395,6 +398,7 @@ a:hover{{background:#1d4ed8}}</style></head>
                     "status":    auto_status(txt("water_discharge_status"), _discharge_any),
                     "surface":   num("water_disch_surface"),
                     "groundwater": num("water_disch_ground"),
+                    "seawater":  num("water_disch_sea"),
                     "third_party": num("water_disch_third"),
                     "treatment_level": txt("water_disch_treatment"),
                     "na_context": txt("water_discharge_na_context"),
@@ -460,7 +464,9 @@ a:hover{{background:#1d4ed8}}</style></head>
                     "fatalities_current":      num("fatalities_emp_current"),
                     "fatalities_prev":         num("fatalities_emp_prev"),
                     "high_consequence_current":num("highconsequence_emp_current"),
+                    "high_consequence_prev":   num("highconsequence_emp_prev"),
                     "recordable_current":      num("recordable_emp_current"),
+                    "recordable_prev":         num("recordable_emp_prev"),
                 },
                 "workers": {
                     "ltifr_current":           num("ltifr_worker_current"),
@@ -468,7 +474,9 @@ a:hover{{background:#1d4ed8}}</style></head>
                     "fatalities_current":      num("fatalities_worker_current"),
                     "fatalities_prev":         num("fatalities_worker_prev"),
                     "high_consequence_current":num("highconsequence_worker_current"),
+                    "high_consequence_prev":   num("highconsequence_worker_prev"),
                     "recordable_current":      num("recordable_worker_current"),
+                    "recordable_prev":         num("recordable_worker_prev"),
                 },
             },
 

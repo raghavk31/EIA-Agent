@@ -511,6 +511,9 @@
               <div class="sub-row"><span>CO₂ (current year, MT)</span><input type="number" name="scope1_co2" step="0.01" placeholder="MT"></div>
               <div class="sub-row"><span>CH₄ (current year, MT CO₂e)</span><input type="number" name="scope1_ch4" step="0.01" placeholder="MT CO₂e"></div>
               <div class="sub-row"><span>N₂O (current year, MT CO₂e)</span><input type="number" name="scope1_n2o" step="0.01" placeholder="MT CO₂e"></div>
+              <div class="sub-row"><span>CO₂ (previous year, MT)</span><input type="number" name="scope1_co2_prev" step="0.01" placeholder="MT"></div>
+              <div class="sub-row"><span>CH₄ (previous year, MT CO₂e)</span><input type="number" name="scope1_ch4_prev" step="0.01" placeholder="MT CO₂e"></div>
+              <div class="sub-row"><span>N₂O (previous year, MT CO₂e)</span><input type="number" name="scope1_n2o_prev" step="0.01" placeholder="MT CO₂e"></div>
             </div>
           </div>
 
@@ -652,6 +655,7 @@
             <div class="sub-fields">
               <div class="sub-row"><span>Surface water discharge (KL, current)</span><input type="number" name="water_disch_surface" placeholder="KL"></div>
               <div class="sub-row"><span>Groundwater discharge (KL, current)</span><input type="number" name="water_disch_ground" placeholder="KL"></div>
+              <div class="sub-row"><span>Seawater discharge (KL, current)</span><input type="number" name="water_disch_sea" placeholder="KL"></div>
               <div class="sub-row"><span>Third-party / CETP (KL, current)</span><input type="number" name="water_disch_third" placeholder="KL"></div>
               <div class="sub-row"><span>Treatment level for primary discharge</span>
                 <select name="water_disch_treatment" style="width:140px;padding:6px 8px;border:1px solid var(--border);border-radius:5px;font-size:12px;">
@@ -872,9 +876,11 @@
               <div class="sub-row"><span>Fatalities</span><input type="number" name="fatalities_emp_current" placeholder="0"></div>
               <div class="sub-row"><span>High consequence injuries (excl. fatalities)</span><input type="number" name="highconsequence_emp_current" placeholder="0"></div>
               <div class="sub-row"><span>Total recordable injuries</span><input type="number" name="recordable_emp_current" placeholder="0"></div>
-              <div class="sub-label">Previous Year — Employees (summary)</div>
+              <div class="sub-label">Previous Year — Employees</div>
               <div class="sub-row"><span>LTIFR previous year</span><input type="number" name="ltifr_emp_prev" step="0.01"></div>
               <div class="sub-row"><span>Fatalities previous year</span><input type="number" name="fatalities_emp_prev" placeholder="0"></div>
+              <div class="sub-row"><span>High consequence injuries previous year</span><input type="number" name="highconsequence_emp_prev" placeholder="0"></div>
+              <div class="sub-row"><span>Total recordable injuries previous year</span><input type="number" name="recordable_emp_prev" placeholder="0"></div>
             </div>
           </div>
 
@@ -894,6 +900,8 @@
               <div class="sub-label">Previous Year — Workers</div>
               <div class="sub-row"><span>LTIFR previous year</span><input type="number" name="ltifr_worker_prev" step="0.01"></div>
               <div class="sub-row"><span>Fatalities previous year</span><input type="number" name="fatalities_worker_prev" placeholder="0"></div>
+              <div class="sub-row"><span>High consequence injuries previous year</span><input type="number" name="highconsequence_worker_prev" placeholder="0"></div>
+              <div class="sub-row"><span>Total recordable injuries previous year</span><input type="number" name="recordable_worker_prev" placeholder="0"></div>
             </div>
           </div>
 

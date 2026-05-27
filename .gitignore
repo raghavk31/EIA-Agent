@@ -18,3 +18,4 @@ Thumbs.db
 .env
 *.key
 secrets.json
+.gstack/
