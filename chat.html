@@ -986,11 +986,9 @@ async function handleFileUpload(file) {
       addMessage('agent', data.message);
 
       if (data.progress && Object.keys(data.progress).length) {
-        // Mark auto-filled sections
         Object.keys(data.progress).forEach(k => {
-          if (data.progress[k]) autoProgress[k] = true;
+          if (data.progress[k]) { progress[k] = true; autoProgress[k] = true; }
         });
-        progress = { ...progress, ...data.progress };
         renderSidebar();
       }
       if (data.ready) setReady();
@@ -1056,7 +1054,8 @@ async function sendMessage() {
     removeTyping();
     addMessage('agent', data.message);
     if (data.progress && Object.keys(data.progress).length) {
-      progress = { ...progress, ...data.progress };
+      // Only move sections forward — never reset a completed section to false
+      Object.keys(data.progress).forEach(k => { if (data.progress[k]) progress[k] = true; });
       renderSidebar();
     }
     if (data.ready) setReady();

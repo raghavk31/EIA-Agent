@@ -37,69 +37,71 @@ def load_system_prompt():
 
 SYSTEM_PROMPT = load_system_prompt()
 
-CHAT_SYSTEM_PROMPT = """You are a BRSR Core data collection assistant. You help Indian listed companies collect the ESG data needed for mandatory BRSR Core disclosure under SEBI regulations (Circular SEBI/HO/CFD/CFD-SEC-2/P/CIR/2023/122).
+CHAT_SYSTEM_PROMPT = """You are DISCLO, a BRSR Core data collection assistant for Indian listed companies. You help collect the 40 mandatory KPIs required under SEBI Circular SEBI/HO/CFD/CFD-SEC-2/P/CIR/2023/122.
 
-CONVERSATION ORDER:
-1. Company name → Financial year (e.g. "FY 2024-25") → Revenue from operations (INR crore)
-2. Then collect data in this sequence: GHG Emissions → Water → Energy → Waste → Safety → Gender Wages → Supply Chain → Customer Data
+══ HOW TO START ══════════════════════════════════════════════════════════════
 
-STYLE RULES:
-- Ask 1-2 questions at a time. Never overwhelm.
-- After each user reply, confirm what you extracted: "Got it — Scope 1 emissions of 47,70,357 MT CO₂e this year."
-- Ask for both current year AND previous year for each metric.
-- If user says data isn't available or being compiled, accept it and move on. Note it as unavailable.
-- Be concise, professional, and warm. This is a compliance task — respect the user's time.
+Check for an "ALREADY COLLECTED" block at the end of this system prompt.
 
-EXTRACTION RULES:
-- Parse Indian number format: 47,70,357 means 4770357 (remove all commas before storing).
-- Only extract what the user explicitly provides. Never infer or fill defaults.
-- Do not include unavailable fields in "extracted".
+► IF ALREADY COLLECTED EXISTS (document was uploaded):
+  Those fields are confirmed from an uploaded document. NEVER ask for them again.
+  1. Check which of the 9 sections below are satisfied by the ALREADY COLLECTED fields.
+  2. In your FIRST reply: name each complete section (e.g. "Company info ✓, GHG ✓") and each incomplete one.
+  3. Ask about the first incomplete section only. Continue section by section.
+  4. If ALL 9 sections are already complete, say so and set ready=true immediately.
 
-FIELD NAMES — use these exact keys in "extracted":
-Company: company_name (str), financial_year (str e.g. "FY 2024-25"), prev_financial_year (str), cin (str), sector (str), revenue_current (float INR crore), revenue_prev (float INR crore)
+► IF NO ALREADY COLLECTED:
+  Start: "What is your company name and the financial year you're reporting for?"
+  Collect in order: Company → GHG → Water → Energy → Waste → Safety → Gender → Supply Chain → Customers.
+
+══ COLLECTION RULES ══════════════════════════════════════════════════════════
+
+- Ask 1–2 questions per turn. Never overwhelm.
+- Confirm each answer: "Got it — Scope 1: 4,770,357 MT CO₂e."
+- Ask for both current year AND prior year for every metric.
+- If data is unavailable, accept it and move on.
+- Parse Indian numbers: 47,70,357 → 4770357 (strip ALL commas).
+- Only extract what is explicitly stated. Never infer or estimate.
+
+══ FIELD KEYS — use exact keys in "extracted" ════════════════════════════════
+
+Company: company_name, financial_year ("FY 2024-25"), prev_financial_year, cin, sector, revenue_current (INR crore), revenue_prev
 Workforce: perm_emp_male, perm_emp_female, contract_workers_male, contract_workers_female
 GHG (MT CO₂e): scope1_current, scope1_prev, scope2_current, scope2_prev, scope1_co2, scope1_ch4, scope1_n2o, scope1_co2_prev, scope1_ch4_prev, scope1_n2o_prev
-Water withdrawal (kilolitres): water_surface_fresh_current, water_ground_fresh_current, water_third_fresh_current, water_sea_current, water_other_current, water_withdrawal_prev, water_consumed_current, water_consumed_prev
-Water discharge (kilolitres): water_disch_surface, water_disch_ground, water_disch_sea, water_disch_third
-Energy (gigajoules): energy_nonrenew_current, energy_nonrenew_prev, energy_renew_current, energy_renew_prev
-Waste (metric tonnes): waste_hazardous, waste_nonhazardous, waste_plastic, waste_ewaste, waste_biomedical, waste_construction, waste_battery, waste_other_hazardous, waste_other_nonhazardous, waste_total_prev, waste_recycled, waste_reused, waste_landfill
+Water (kilolitres): water_surface_fresh_current, water_ground_fresh_current, water_third_fresh_current, water_sea_current, water_other_current, water_withdrawal_prev, water_consumed_current, water_consumed_prev, water_disch_surface, water_disch_ground, water_disch_sea, water_disch_third
+Energy (GJ): energy_nonrenew_current, energy_nonrenew_prev, energy_renew_current, energy_renew_prev
+Waste (MT): waste_hazardous, waste_nonhazardous, waste_plastic, waste_ewaste, waste_biomedical, waste_construction, waste_battery, waste_other_hazardous, waste_other_nonhazardous, waste_total_prev, waste_recycled, waste_reused, waste_landfill
 Safety: ltifr_emp_current, ltifr_emp_prev, fatalities_emp_current, fatalities_emp_prev, highconsequence_emp_current, highconsequence_emp_prev, recordable_emp_current, recordable_emp_prev, manhours_emp_current, ltifr_worker_current, ltifr_worker_prev, fatalities_worker_current, fatalities_worker_prev, highconsequence_worker_current, highconsequence_worker_prev, recordable_worker_current, recordable_worker_prev, wellbeing_emp_pct_current, wellbeing_emp_pct_prev, wellbeing_worker_pct_current, wellbeing_worker_pct_prev
 Gender: female_wages_pct_current (%), female_wages_pct_prev (%)
 Supply chain: msme_pct_current (%), msme_pct_prev (%), india_sourcing_pct_current (%), india_sourcing_pct_prev (%), smaller_towns_pct_current (%), smaller_towns_pct_prev (%)
 Customers: data_breach_pct_current (%), data_breach_count_current, total_cyber_events, ap_days_current, ap_days_prev
-Director: director_name (str), director_din (str), director_designation (str)
+Director: director_name, director_din, director_designation
 
-PROGRESS TRACKING:
-Mark a section true when you have collected its primary metrics OR the user has confirmed the data is unavailable.
-- company: have company_name + financial_year + revenue_current
-- ghg: have scope1_current + scope2_current (or confirmed N/A)
-- water: have water_consumed_current (or confirmed N/A)
-- energy: have energy_nonrenew_current + energy_renew_current (or confirmed N/A)
-- waste: have at least one waste type (or confirmed N/A)
-- safety: have ltifr_emp_current + fatalities_emp_current (or confirmed N/A)
-- gender: have female_wages_pct_current (or confirmed N/A)
-- supply_chain: have msme_pct_current (or confirmed N/A)
-- customers: have ap_days_current (or confirmed N/A)
+══ PROGRESS CRITERIA ═════════════════════════════════════════════════════════
 
-RESPONSE FORMAT — always respond with ONLY valid JSON, no markdown, no code fences, no preamble:
+A section is COMPLETE if its fields appear in ALREADY COLLECTED OR were confirmed in this conversation:
+- company:      company_name AND financial_year AND revenue_current
+- ghg:          scope1_current AND scope2_current
+- water:        water_consumed_current
+- energy:       energy_nonrenew_current AND energy_renew_current
+- waste:        any one of waste_hazardous, waste_nonhazardous, waste_plastic, waste_ewaste
+- safety:       ltifr_emp_current AND fatalities_emp_current
+- gender:       female_wages_pct_current
+- supply_chain: msme_pct_current
+- customers:    ap_days_current
+
+══ RESPONSE FORMAT ═══════════════════════════════════════════════════════════
+
+ONLY valid JSON — no markdown, no code fences, no preamble:
 {
-  "message": "Your conversational reply and next question (plain text, no markdown formatting)",
+  "message": "Your conversational reply (plain text, no markdown)",
   "extracted": {},
-  "progress": {
-    "company": false,
-    "ghg": false,
-    "water": false,
-    "energy": false,
-    "waste": false,
-    "safety": false,
-    "gender": false,
-    "supply_chain": false,
-    "customers": false
-  },
+  "progress": {"company":false,"ghg":false,"water":false,"energy":false,"waste":false,"safety":false,"gender":false,"supply_chain":false,"customers":false},
   "ready": false
 }
 
-Set ready=true only when all 9 progress sections are true."""
+Set ready=true only when all 9 sections are true.
+ALWAYS evaluate all 9 sections against ALREADY COLLECTED fields when computing progress."""
 
 
 EXTRACTION_SYSTEM_PROMPT = """You are a BRSR Core data extraction specialist. Your only job is to read a document and extract BRSR KPI values from it.
@@ -303,9 +305,19 @@ def extract_brsr_fields_from_pdf(file_bytes: bytes, filename: str) -> dict:
 
 
 def extract_brsr_fields_from_text(doc_text: str, filename: str) -> dict:
-    """Extract BRSR fields from pre-extracted text (Excel/CSV)."""
+    """Extract BRSR fields from text content (Excel/CSV or pdfminer-extracted PDF text)."""
     model = os.environ.get("OPENROUTER_MODEL", "anthropic/claude-sonnet-4-5")
-    user_msg = f"Extract all BRSR Core KPI values from this spreadsheet data ({filename}):\n\n{doc_text}"
+    user_msg = (
+        f"Extract all BRSR Core KPI values from the document below.\n"
+        f"File: {filename}\n\n"
+        f"CONTEXT: This text may be extracted from a PDF via pdfminer — tables are often "
+        f"garbled with values and labels on separate lines or in non-obvious positions. "
+        f"Be aggressive: if a number appears near a BRSR-relevant keyword (Scope, GHG, water, "
+        f"energy, LTIFR, fatalities, female, MSME, payable days), include it even if the "
+        f"formatting is imperfect. Convert MWh→GJ (×3.6) if energy is in MWh. "
+        f"The BRSR section in an Annual Report is usually near the end of the document.\n\n"
+        f"DOCUMENT TEXT:\n{doc_text}"
+    )
     response = get_client().chat.completions.create(
         model=model,
         max_tokens=3000,
@@ -346,6 +358,27 @@ def call_chat_claude(history: list, existing_fields: dict = None) -> dict:
             except Exception:
                 pass
     return {"message": text, "extracted": {}, "progress": {}, "ready": False}
+
+
+def compute_progress(fields: dict) -> dict:
+    """Deterministic server-side progress — never depends on Claude's JSON assessment."""
+    def present(*keys):
+        return all(fields.get(k) not in (None, "", 0) for k in keys)
+    def any_present(*keys):
+        return any(fields.get(k) not in (None, "", 0) for k in keys)
+    waste = ("waste_hazardous", "waste_nonhazardous", "waste_plastic",
+             "waste_ewaste", "waste_biomedical", "waste_construction", "waste_battery")
+    return {
+        "company":      present("company_name", "financial_year", "revenue_current"),
+        "ghg":          present("scope1_current", "scope2_current"),
+        "water":        present("water_consumed_current"),
+        "energy":       present("energy_nonrenew_current", "energy_renew_current"),
+        "waste":        any_present(*waste),
+        "safety":       present("ltifr_emp_current", "fatalities_emp_current"),
+        "gender":       present("female_wages_pct_current"),
+        "supply_chain": present("msme_pct_current"),
+        "customers":    present("ap_days_current"),
+    }
 
 
 def auto_status(form_status, *check_values):
@@ -900,11 +933,13 @@ def chat():
     reply = result.get("message") or "I'm ready to help with your BRSR report. What is your company name?"
     session["history"].append({"role": "assistant", "content": reply})
 
+    # Compute progress from session fields — never trust Claude's JSON for sidebar state
+    prog = compute_progress(session["fields"])
     return jsonify({
         "session_id": session_id,
         "message": reply,
-        "progress": result.get("progress") or {},
-        "ready": result.get("ready", False),
+        "progress": prog,
+        "ready": all(prog.values()),
     })
 
 
@@ -953,12 +988,13 @@ def upload():
     session["history"].append({"role": "user", "content": f"[Uploaded: {file.filename}]"})
     session["history"].append({"role": "assistant", "content": reply})
 
+    prog = compute_progress(session["fields"])
     return jsonify({
         "session_id": session_id,
         "message": reply,
-        "progress": result.get("progress") or {},
+        "progress": prog,
         "fields_found": len(extracted),
-        "ready": False,
+        "ready": all(prog.values()),
     })
 
 
