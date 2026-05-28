@@ -181,36 +181,125 @@ def _parse_extraction_response(text: str, filename: str) -> dict:
     }
 
 
-def extract_brsr_fields_from_pdf(file_bytes: bytes, filename: str) -> dict:
-    """Send PDF directly to Claude — native PDF understanding preserves table structure."""
-    model = os.environ.get("OPENROUTER_MODEL", "anthropic/claude-sonnet-4-5")
+def _anthropic_extract_pdf(file_bytes: bytes, filename: str) -> dict:
+    """
+    Use the Anthropic Messages API (via OpenRouter's /messages endpoint) to send
+    the PDF as a native document. This preserves table structure and reads the
+    entire file regardless of where the BRSR section sits.
+    """
+    from anthropic import Anthropic
+
+    api_key = os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("OPENROUTER_API_KEY")
+    if not api_key:
+        raise RuntimeError("No API key available for document extraction.")
+
+    if os.environ.get("ANTHROPIC_API_KEY"):
+        client = Anthropic(api_key=api_key)
+        model = "claude-sonnet-4-5-20251101"
+    else:
+        # OpenRouter's /api/v1 is Anthropic-SDK-compatible; /messages supports document type
+        client = Anthropic(
+            api_key=api_key,
+            base_url="https://openrouter.ai/api/v1",
+            default_headers={
+                "HTTP-Referer": "https://disclo.in",
+                "X-Title": "DISCLO BRSR Agent",
+            },
+        )
+        model = os.environ.get("OPENROUTER_MODEL", "anthropic/claude-sonnet-4-5")
+
     b64 = base64.b64encode(file_bytes).decode()
-    response = get_client().chat.completions.create(
+    response = client.messages.create(
         model=model,
         max_tokens=3000,
+        system=EXTRACTION_SYSTEM_PROMPT,
         messages=[
-            {"role": "system", "content": EXTRACTION_SYSTEM_PROMPT},
             {
                 "role": "user",
                 "content": [
                     {
-                        "type": "image_url",
-                        "image_url": {"url": f"data:application/pdf;base64,{b64}"},
+                        "type": "document",
+                        "source": {
+                            "type": "base64",
+                            "media_type": "application/pdf",
+                            "data": b64,
+                        },
                     },
                     {
                         "type": "text",
                         "text": (
                             f"This is an Indian company's Annual Report or BRSR disclosure. "
-                            f"Find and extract all BRSR Core KPI values. "
-                            f"Focus on: Section C Principle-wise disclosures, the BRSR Core KPI Index table, "
-                            f"and any ESG/sustainability data appendix. Filename: {filename}"
+                            f"Read the entire document and extract all BRSR Core KPI values. "
+                            f"Focus on Section C Principle-wise disclosures and the BRSR Core KPI Index. "
+                            f"Filename: {filename}"
                         ),
                     },
                 ],
-            },
+            }
         ],
     )
-    return _parse_extraction_response(response.choices[0].message.content.strip(), filename)
+    return _parse_extraction_response(response.content[0].text.strip(), filename)
+
+
+def _pdfminer_extract_brsr_section(file_bytes: bytes) -> str:
+    """
+    Text fallback: extract text with pdfminer, then find the BRSR section.
+    BRSR Core KPI data sits near the END of Annual Reports — taking the first
+    N chars misses it entirely. We search for section markers first.
+    """
+    from pdfminer.high_level import extract_text
+
+    full_text = extract_text(io.BytesIO(file_bytes))
+    if not full_text or len(full_text.strip()) < 100:
+        return ""
+
+    text_upper = full_text.upper()
+    markers = [
+        "BUSINESS RESPONSIBILITY AND SUSTAINABILITY REPORT",
+        "BUSINESS RESPONSIBILITY & SUSTAINABILITY REPORT",
+        "BRSR CORE",
+        "BRSR — CORE",
+        "PRINCIPLE-WISE PERFORMANCE DISCLOSURE",
+        "SECTION A: GENERAL DISCLOSURES",
+        "SECTION A : GENERAL DISCLOSURES",
+    ]
+    best_idx = len(full_text)
+    for marker in markers:
+        idx = text_upper.find(marker)
+        if 0 < idx < best_idx:
+            best_idx = idx
+
+    if best_idx < len(full_text):
+        start = max(0, best_idx - 500)
+        return full_text[start : start + 120000]
+
+    # No marker found — BRSR is typically in the last quarter of Annual Reports
+    return full_text[-80000:] if len(full_text) > 80000 else full_text
+
+
+def extract_brsr_fields_from_pdf(file_bytes: bytes, filename: str) -> dict:
+    """
+    Primary: send PDF to Claude via Anthropic Messages API (full doc, native tables).
+    Fallback: pdfminer text extraction targeting the BRSR section.
+    """
+    try:
+        return _anthropic_extract_pdf(file_bytes, filename)
+    except Exception as primary_err:
+        # Log and fall back to text extraction
+        print(f"[upload] Anthropic PDF route failed ({primary_err}), falling back to pdfminer")
+
+    text = _pdfminer_extract_brsr_section(file_bytes)
+    if not text:
+        return {
+            "extracted": {},
+            "message": (
+                f"'{filename}' appears to be a scanned PDF — I can't extract text from it. "
+                "Please provide an Excel or CSV with your ESG data instead, "
+                "or copy the BRSR table numbers directly into the chat."
+            ),
+            "progress": {},
+        }
+    return extract_brsr_fields_from_text(text, filename)
 
 
 def extract_brsr_fields_from_text(doc_text: str, filename: str) -> dict:
