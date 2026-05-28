@@ -2,15 +2,20 @@ import io
 import json
 import os
 import re
+import uuid
 import markdown as md
 from dotenv import load_dotenv
 from openai import OpenAI
-from flask import Flask, request, send_file, Response, render_template
+from flask import Flask, request, send_file, Response, render_template, jsonify
 
 load_dotenv()  # no-op in production where env vars are set directly
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 4 * 1024 * 1024  # 4 MB form limit
+
+# In-memory chat sessions: {session_id: {fields: {}, history: []}}
+# Single worker only — see Dockerfile. Switch to Redis for multi-worker.
+chat_sessions: dict = {}
 
 
 def get_client():
@@ -30,6 +35,93 @@ def load_system_prompt():
 
 
 SYSTEM_PROMPT = load_system_prompt()
+
+CHAT_SYSTEM_PROMPT = """You are a BRSR Core data collection assistant. You help Indian listed companies collect the ESG data needed for mandatory BRSR Core disclosure under SEBI regulations (Circular SEBI/HO/CFD/CFD-SEC-2/P/CIR/2023/122).
+
+CONVERSATION ORDER:
+1. Company name → Financial year (e.g. "FY 2024-25") → Revenue from operations (INR crore)
+2. Then collect data in this sequence: GHG Emissions → Water → Energy → Waste → Safety → Gender Wages → Supply Chain → Customer Data
+
+STYLE RULES:
+- Ask 1-2 questions at a time. Never overwhelm.
+- After each user reply, confirm what you extracted: "Got it — Scope 1 emissions of 47,70,357 MT CO₂e this year."
+- Ask for both current year AND previous year for each metric.
+- If user says data isn't available or being compiled, accept it and move on. Note it as unavailable.
+- Be concise, professional, and warm. This is a compliance task — respect the user's time.
+
+EXTRACTION RULES:
+- Parse Indian number format: 47,70,357 means 4770357 (remove all commas before storing).
+- Only extract what the user explicitly provides. Never infer or fill defaults.
+- Do not include unavailable fields in "extracted".
+
+FIELD NAMES — use these exact keys in "extracted":
+Company: company_name (str), financial_year (str e.g. "FY 2024-25"), prev_financial_year (str), cin (str), sector (str), revenue_current (float INR crore), revenue_prev (float INR crore)
+Workforce: perm_emp_male, perm_emp_female, contract_workers_male, contract_workers_female
+GHG (MT CO₂e): scope1_current, scope1_prev, scope2_current, scope2_prev, scope1_co2, scope1_ch4, scope1_n2o, scope1_co2_prev, scope1_ch4_prev, scope1_n2o_prev
+Water withdrawal (kilolitres): water_surface_fresh_current, water_ground_fresh_current, water_third_fresh_current, water_sea_current, water_other_current, water_withdrawal_prev, water_consumed_current, water_consumed_prev
+Water discharge (kilolitres): water_disch_surface, water_disch_ground, water_disch_sea, water_disch_third
+Energy (gigajoules): energy_nonrenew_current, energy_nonrenew_prev, energy_renew_current, energy_renew_prev
+Waste (metric tonnes): waste_hazardous, waste_nonhazardous, waste_plastic, waste_ewaste, waste_biomedical, waste_construction, waste_battery, waste_other_hazardous, waste_other_nonhazardous, waste_total_prev, waste_recycled, waste_reused, waste_landfill
+Safety: ltifr_emp_current, ltifr_emp_prev, fatalities_emp_current, fatalities_emp_prev, highconsequence_emp_current, highconsequence_emp_prev, recordable_emp_current, recordable_emp_prev, manhours_emp_current, ltifr_worker_current, ltifr_worker_prev, fatalities_worker_current, fatalities_worker_prev, highconsequence_worker_current, highconsequence_worker_prev, recordable_worker_current, recordable_worker_prev, wellbeing_emp_pct_current, wellbeing_emp_pct_prev, wellbeing_worker_pct_current, wellbeing_worker_pct_prev
+Gender: female_wages_pct_current (%), female_wages_pct_prev (%)
+Supply chain: msme_pct_current (%), msme_pct_prev (%), india_sourcing_pct_current (%), india_sourcing_pct_prev (%), smaller_towns_pct_current (%), smaller_towns_pct_prev (%)
+Customers: data_breach_pct_current (%), data_breach_count_current, total_cyber_events, ap_days_current, ap_days_prev
+Director: director_name (str), director_din (str), director_designation (str)
+
+PROGRESS TRACKING:
+Mark a section true when you have collected its primary metrics OR the user has confirmed the data is unavailable.
+- company: have company_name + financial_year + revenue_current
+- ghg: have scope1_current + scope2_current (or confirmed N/A)
+- water: have water_consumed_current (or confirmed N/A)
+- energy: have energy_nonrenew_current + energy_renew_current (or confirmed N/A)
+- waste: have at least one waste type (or confirmed N/A)
+- safety: have ltifr_emp_current + fatalities_emp_current (or confirmed N/A)
+- gender: have female_wages_pct_current (or confirmed N/A)
+- supply_chain: have msme_pct_current (or confirmed N/A)
+- customers: have ap_days_current (or confirmed N/A)
+
+RESPONSE FORMAT — always respond with ONLY valid JSON, no markdown, no code fences, no preamble:
+{
+  "message": "Your conversational reply and next question (plain text, no markdown formatting)",
+  "extracted": {},
+  "progress": {
+    "company": false,
+    "ghg": false,
+    "water": false,
+    "energy": false,
+    "waste": false,
+    "safety": false,
+    "gender": false,
+    "supply_chain": false,
+    "customers": false
+  },
+  "ready": false
+}
+
+Set ready=true only when all 9 progress sections are true."""
+
+
+def call_chat_claude(history: list) -> dict:
+    model = os.environ.get("OPENROUTER_MODEL", "anthropic/claude-sonnet-4-5")
+    response = get_client().chat.completions.create(
+        model=model,
+        max_tokens=1500,
+        messages=[
+            {"role": "system", "content": CHAT_SYSTEM_PROMPT},
+            *history,
+        ],
+    )
+    text = response.choices[0].message.content.strip()
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        match = re.search(r'\{[\s\S]*\}', text)
+        if match:
+            try:
+                return json.loads(match.group())
+            except Exception:
+                pass
+    return {"message": text, "extracted": {}, "progress": {}, "ready": False}
 
 
 def auto_status(form_status, *check_values):
@@ -207,26 +299,21 @@ hr {{ border: none; border-top: 1pt solid #e5e7eb; margin: 10pt 0; }}
     return buf.getvalue()
 
 
-@app.route("/")
-def index():
-    return send_file("form.html")
-
-
-@app.route("/generate", methods=["POST"])
-def generate():
-    f = request.form
+def build_payload(get_str) -> dict:
+    """Build the structured data payload for Claude. get_str(key) returns a string."""
 
     def num(key, default=None):
-        val = f.get(key, "").strip()
+        val = str(get_str(key)).strip().replace(",", "")
         try:
             return float(val) if val else default
         except ValueError:
             return default
 
     def txt(key):
-        return f.get(key, "").strip() or None
+        v = str(get_str(key)).strip()
+        return v if v else None
 
-    # ── Revenue (denominator for all intensity calculations) ──────────────
+    # ── Revenue ───────────────────────────────────────────────────────────
     revenue_current = num("revenue_current")
     revenue_prev = num("revenue_prev")
 
@@ -266,26 +353,6 @@ def generate():
     waste_intensity = None
     if waste_total is not None and revenue_current:
         waste_intensity = round(waste_total / revenue_current, 4)
-
-    # ── Pre-flight validation ─────────────────────────────────────────────
-    missing = []
-    if not txt("company_name"):
-        missing.append("Company Name")
-    if not txt("financial_year"):
-        missing.append("Financial Year")
-    if revenue_current is None:
-        missing.append("Current Year Revenue (required for all intensity calculations)")
-    if missing:
-        items = "".join(f"<li>{m}</li>" for m in missing)
-        return f"""<!DOCTYPE html>
-<html lang="en"><head><meta charset="UTF-8"><title>Missing Fields</title>
-<style>body{{font-family:-apple-system,sans-serif;max-width:600px;margin:60px auto;padding:0 24px;color:#1a1d23}}
-h2{{color:#dc2626;margin-bottom:12px}}ul{{margin:12px 0 24px;padding-left:20px;line-height:1.8}}
-a{{display:inline-block;padding:10px 20px;background:#2563eb;color:#fff;border-radius:6px;text-decoration:none;font-weight:500}}
-a:hover{{background:#1d4ed8}}</style></head>
-<body><h2>Cannot generate report — required fields missing</h2>
-<p>Please fill in the following fields before generating:</p>
-<ul>{items}</ul><a href="/">← Back to form</a></body></html>""", 400
 
     # ── Helpers for auto_status detection ────────────────────────────────
     _water_sources = [
@@ -549,19 +616,107 @@ a:hover{{background:#1d4ed8}}</style></head>
         },
     }
 
+    return data
+
+
+# ── PDF helper ────────────────────────────────────────────────────────────────
+
+def _generate_pdf_response(data: dict):
     draft = call_claude(data)
     pdf_bytes = markdown_to_pdf(draft, data)
-
     company_name = (data.get("company", {}).get("name") or "Company").replace(" ", "_")
     fy = (data.get("company", {}).get("financial_year") or "FY").replace(" ", "_")
     filename = f"BRSR_Core_{company_name}_{fy}.pdf"
-
     return send_file(
         io.BytesIO(pdf_bytes),
         mimetype="application/pdf",
         as_attachment=True,
         download_name=filename,
     )
+
+
+# ── Routes ────────────────────────────────────────────────────────────────────
+
+@app.route("/")
+def index():
+    return send_file("chat.html")
+
+
+@app.route("/form")
+def legacy_form():
+    return send_file("form.html")
+
+
+@app.route("/chat", methods=["POST"])
+def chat():
+    body = request.json or {}
+    session_id = body.get("session_id")
+    message = body.get("message", "")
+
+    if not session_id or session_id not in chat_sessions:
+        session_id = str(uuid.uuid4())
+        chat_sessions[session_id] = {"fields": {}, "history": []}
+
+    session = chat_sessions[session_id]
+
+    if message and message != "__start__":
+        session["history"].append({"role": "user", "content": message})
+
+    result = call_chat_claude(session["history"])
+
+    extracted = result.get("extracted") or {}
+    if extracted:
+        session["fields"].update(extracted)
+
+    reply = result.get("message") or "I'm ready to help with your BRSR report. What is your company name?"
+    session["history"].append({"role": "assistant", "content": reply})
+
+    return jsonify({
+        "session_id": session_id,
+        "message": reply,
+        "progress": result.get("progress") or {},
+        "ready": result.get("ready", False),
+    })
+
+
+@app.route("/generate_chat", methods=["POST"])
+def generate_chat():
+    body = request.json or {}
+    session_id = body.get("session_id")
+
+    if not session_id or session_id not in chat_sessions:
+        return jsonify({"error": "Session not found. Please refresh and start again."}), 400
+
+    fields = chat_sessions[session_id]["fields"]
+
+    if not fields.get("company_name"):
+        return jsonify({"error": "Company name is required before generating the report."}), 400
+
+    data = build_payload(lambda key: str(fields.get(key, "")))
+    return _generate_pdf_response(data)
+
+
+@app.route("/generate", methods=["POST"])
+def generate():
+    f = request.form
+    missing = []
+    if not f.get("company_name", "").strip():
+        missing.append("Company Name")
+    if not f.get("financial_year", "").strip():
+        missing.append("Financial Year")
+    if not f.get("revenue_current", "").strip():
+        missing.append("Current Year Revenue")
+    if missing:
+        items = "".join(f"<li>{m}</li>" for m in missing)
+        return f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Missing Fields</title>
+<style>body{{font-family:-apple-system,sans-serif;max-width:600px;margin:60px auto;padding:0 24px}}
+h2{{color:#dc2626}}ul{{margin:12px 0 24px;padding-left:20px;line-height:1.8}}
+a{{display:inline-block;padding:10px 20px;background:#0ea5e9;color:#fff;border-radius:6px;text-decoration:none}}
+</style></head><body><h2>Required fields missing</h2><ul>{items}</ul>
+<a href="/form">← Back to form</a></body></html>""", 400
+
+    data = build_payload(lambda key: f.get(key, ""))
+    return _generate_pdf_response(data)
 
 
 if __name__ == "__main__":
