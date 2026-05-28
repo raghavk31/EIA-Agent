@@ -106,12 +106,26 @@ ALWAYS evaluate all 9 sections against ALREADY COLLECTED fields when computing p
 
 EXTRACTION_SYSTEM_PROMPT = """You are a BRSR Core data extraction specialist. Your only job is to read a document and extract BRSR KPI values from it.
 
+DOCUMENT STRUCTURE GUIDANCE:
+Indian BRSR reports contain a "BRSR Core KPI Index" (or "Essential Indicators" tables) where data appears in rows like:
+  KPI name | Current Year value | Previous Year value | Status
+Key sections to search:
+- "Principle 6" or "Environmental" → GHG, water, energy, waste
+- "Principle 3" or "Safety" / "Wellbeing" → LTIFR, fatalities, high-consequence incidents
+- "Principle 5" or "Wages" / "Gender" → female wage ratio
+- "Principle 8" or "Supply Chain" / "MSME" → MSME %, India sourcing %
+- "Principle 9" or "Consumer" / "Data" → accounts payable days, cyber breaches
+
+NOTE: This text may be PDF-extracted where tables are garbled. Numbers often appear with their labels split across lines. Be AGGRESSIVE — if a number appears near a BRSR keyword, extract it. Use context to determine what each number represents.
+
 EXTRACTION RULES:
 - Parse Indian number format: remove all commas before storing (47,70,357 → 4770357).
-- Only extract values explicitly present in the document. Never infer or estimate.
+- Extract ALL values you can find. Do not skip uncertain values — include them with a note if needed.
 - Identify the company name and financial year from the document.
 - For each metric, extract both current year and previous year if available.
 - Revenue figures: if you see "revenue from operations" in INR crore, extract as revenue_current.
+- Energy in MWh: convert to GJ (multiply by 3.6).
+- LTIFR (Lost Time Injury Frequency Rate) is usually a small decimal like 0.12 — not a large integer.
 
 FIELD NAMES — use these exact keys in "extracted":
 Company: company_name (str), financial_year (str e.g. "FY 2024-25"), prev_financial_year (str), cin (str), sector (str), revenue_current (float INR crore), revenue_prev (float)
@@ -213,7 +227,7 @@ def _anthropic_extract_pdf(file_bytes: bytes, filename: str) -> dict:
     b64 = base64.b64encode(file_bytes).decode()
     response = client.messages.create(
         model=model,
-        max_tokens=3000,
+        max_tokens=4000,
         system=EXTRACTION_SYSTEM_PROMPT,
         messages=[
             {
@@ -320,7 +334,7 @@ def extract_brsr_fields_from_text(doc_text: str, filename: str) -> dict:
     )
     response = get_client().chat.completions.create(
         model=model,
-        max_tokens=3000,
+        max_tokens=4000,
         messages=[
             {"role": "system", "content": EXTRACTION_SYSTEM_PROMPT},
             {"role": "user", "content": user_msg},
@@ -914,12 +928,26 @@ def chat():
     body = request.json or {}
     session_id = body.get("session_id")
     message = body.get("message", "")
+    # client_fields: fields stored in the browser so sessions survive server restarts
+    client_fields = body.get("client_fields") or {}
 
     if not session_id or session_id not in chat_sessions:
-        session_id = str(uuid.uuid4())
-        chat_sessions[session_id] = {"fields": {}, "history": []}
+        session_id = session_id or str(uuid.uuid4())
+        # Rebuild session from client-side fields so a Railway redeploy doesn't reset progress
+        restored_history = []
+        if client_fields:
+            restored_history = [
+                {"role": "user", "content": "[Resuming session — fields restored from client]"},
+            ]
+        chat_sessions[session_id] = {"fields": dict(client_fields), "history": restored_history}
 
     session = chat_sessions[session_id]
+
+    # Merge any client fields that are newer than what the server has (safe: client only grows)
+    if client_fields:
+        for k, v in client_fields.items():
+            if v not in (None, "") and session["fields"].get(k) in (None, ""):
+                session["fields"][k] = v
 
     if message and message != "__start__":
         session["history"].append({"role": "user", "content": message})
@@ -935,11 +963,14 @@ def chat():
 
     # Compute progress from session fields — never trust Claude's JSON for sidebar state
     prog = compute_progress(session["fields"])
+    # Return new_fields so the client can keep its copy in sync
+    new_fields = {k: v for k, v in session["fields"].items() if v not in (None, "")}
     return jsonify({
         "session_id": session_id,
         "message": reply,
         "progress": prog,
         "ready": all(prog.values()),
+        "new_fields": new_fields,
     })
 
 
@@ -989,11 +1020,13 @@ def upload():
     session["history"].append({"role": "assistant", "content": reply})
 
     prog = compute_progress(session["fields"])
+    all_fields = {k: v for k, v in session["fields"].items() if v not in (None, "")}
     return jsonify({
         "session_id": session_id,
         "message": reply,
         "progress": prog,
         "fields_found": len(extracted),
+        "fields": all_fields,
         "ready": all(prog.values()),
     })
 

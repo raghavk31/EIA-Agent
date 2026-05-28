@@ -846,6 +846,7 @@ let sessionId = null;
 let isReady = false;
 let progress = {};
 let autoProgress = {};  // tracks which were auto-filled from upload
+let storedFields = {};  // client-side field mirror — survives server restarts
 let isWaiting = false;
 let started = false;
 
@@ -985,6 +986,9 @@ async function handleFileUpload(file) {
       sessionId = data.session_id;
       addMessage('agent', data.message);
 
+      // Store fields in browser so they survive server restarts
+      if (data.fields) storedFields = { ...storedFields, ...data.fields };
+
       if (data.progress && Object.keys(data.progress).length) {
         Object.keys(data.progress).forEach(k => {
           if (data.progress[k]) { progress[k] = true; autoProgress[k] = true; }
@@ -1047,12 +1051,14 @@ async function sendMessage() {
     const res = await fetch('/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ session_id: sessionId, message: text }),
+      body: JSON.stringify({ session_id: sessionId, message: text, client_fields: storedFields }),
     });
     const data = await res.json();
     sessionId = data.session_id;
     removeTyping();
     addMessage('agent', data.message);
+    // Keep client-side field mirror in sync with anything Claude extracted this turn
+    if (data.new_fields) storedFields = { ...storedFields, ...data.new_fields };
     if (data.progress && Object.keys(data.progress).length) {
       // Only move sections forward — never reset a completed section to false
       Object.keys(data.progress).forEach(k => { if (data.progress[k]) progress[k] = true; });
@@ -1107,7 +1113,7 @@ async function generateReport() {
 }
 
 function resetChat() {
-  sessionId = null; isReady = false; progress = {}; autoProgress = {}; started = false;
+  sessionId = null; isReady = false; progress = {}; autoProgress = {}; storedFields = {}; started = false;
   document.getElementById('messages').innerHTML = `
     <div class="welcome" id="welcome">
       <p class="welcome-wordmark">DISCLO</p>
