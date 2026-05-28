@@ -157,7 +157,6 @@ header {
   display: block;
 }
 
-/* Attribute rows — credential-row style from landing */
 .attr-rows {
   border-top: 1px solid var(--border);
 }
@@ -203,7 +202,19 @@ header {
   font-weight: 500;
 }
 
-/* Progress */
+/* Auto-collected chip shown when field came from upload */
+.attr-row.auto .attr-name::after {
+  content: 'auto';
+  display: inline-block;
+  margin-left: 6px;
+  font-size: 9px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--verdigris);
+  vertical-align: middle;
+}
+
 .sidebar-progress {
   margin-top: 20px;
   padding-top: 16px;
@@ -343,6 +354,70 @@ header {
   letter-spacing: 0.02em;
 }
 
+/* ── UPLOAD ZONE ─────────────────────────────────────────────────────────── */
+.upload-sep {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  max-width: 380px;
+  margin-top: 20px;
+  color: var(--ink-light);
+  font-size: 11.5px;
+}
+
+.upload-sep::before,
+.upload-sep::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.upload-zone {
+  width: 100%;
+  max-width: 380px;
+  border: 1.5px dashed var(--border);
+  border-radius: 4px;
+  background: var(--surface-ruled);
+  padding: 28px 24px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  transition: border-color 0.18s, background 0.18s;
+  user-select: none;
+}
+
+.upload-zone:hover,
+.upload-zone.drag-over {
+  border-color: var(--verdigris);
+  background: #EBF0EE;
+}
+
+.upload-zone-icon {
+  color: var(--ink-light);
+  margin-bottom: 2px;
+  transition: color 0.18s;
+}
+
+.upload-zone:hover .upload-zone-icon,
+.upload-zone.drag-over .upload-zone-icon {
+  color: var(--ink-mid);
+}
+
+.upload-zone-title {
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--ink-mid);
+}
+
+.upload-zone-sub {
+  font-size: 11.5px;
+  color: var(--ink-light);
+}
+
 /* ── MESSAGES ────────────────────────────────────────────────────────────── */
 .message {
   display: flex;
@@ -386,6 +461,15 @@ header {
   background: var(--surface-dark);
   color: rgba(255,255,255,0.85);
   border-radius: 10px 2px 10px 10px;
+}
+
+/* File upload bubble */
+.upload-file-bubble {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 11px 16px;
+  font-size: 13px;
 }
 
 /* ── TYPING ──────────────────────────────────────────────────────────────── */
@@ -480,12 +564,33 @@ header {
   background: var(--white);
   border: 1px solid var(--border);
   border-radius: 4px;
-  padding: 12px 12px 12px 18px;
+  padding: 12px 12px 12px 14px;
   transition: border-color 0.18s;
 }
 
 .input-row:focus-within {
   border-color: var(--ink-mid);
+}
+
+.attach-btn {
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink-light);
+  border-radius: 4px;
+  transition: color 0.18s, background 0.18s;
+  margin-bottom: 2px;
+}
+
+.attach-btn:hover {
+  color: var(--ink-mid);
+  background: var(--surface-ruled);
 }
 
 textarea {
@@ -529,6 +634,16 @@ textarea::placeholder { color: var(--ink-light); }
   text-align: center;
 }
 
+/* Upload hint that appears inside input area after welcome is gone */
+.input-upload-hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--ink-light);
+  margin-top: 8px;
+}
+
 /* ── LOADING OVERLAY ─────────────────────────────────────────────────────── */
 .loading-overlay {
   position: fixed;
@@ -551,7 +666,7 @@ textarea::placeholder { color: var(--ink-light); }
   width: 40px;
   height: 40px;
   border: 2px solid var(--border);
-  border-top-color: var(--verdigris);
+  border-top-color: var(--ink-mid);
   border-radius: 50%;
   animation: spin 0.9s linear infinite;
 }
@@ -581,13 +696,17 @@ textarea::placeholder { color: var(--ink-light); }
   .ready-banner { padding: 12px 20px; flex-direction: column; align-items: stretch; }
   .ready-generate-btn { justify-content: center; }
   .bubble { max-width: 100%; }
+  .upload-zone { max-width: 100%; }
 }
 
 </style>
 </head>
 <body>
 
-<!-- Loading overlay -->
+<!-- Hidden file input shared by welcome zone + attach button -->
+<input type="file" id="fileInput" accept=".pdf,.xlsx,.xls,.csv" style="display:none" onchange="handleFileSelect(this)">
+
+<!-- Loading overlay (report generation) -->
 <div class="loading-overlay" id="loadingOverlay">
   <div class="loading-spinner"></div>
   <p class="loading-headline">Generating your BRSR Core report…</p>
@@ -643,7 +762,7 @@ textarea::placeholder { color: var(--ink-light); }
         <p class="welcome-wordmark">DISCLO</p>
         <div class="welcome-rule"></div>
         <p class="welcome-sub">BRSR Core Agent</p>
-        <p class="welcome-desc">I'll collect your 40 mandatory KPIs through a conversation. No forms. Tell me what you have.</p>
+        <p class="welcome-desc">Upload your ESG data and I'll extract what I can — then ask only about what's still missing.</p>
         <div class="welcome-tags">
           <span class="welcome-tag">GHG Scope 1 &amp; 2</span>
           <span class="welcome-tag">Water</span>
@@ -652,6 +771,22 @@ textarea::placeholder { color: var(--ink-light); }
           <span class="welcome-tag">Safety</span>
           <span class="welcome-tag">Gender Wages</span>
         </div>
+
+        <div class="upload-sep">or upload your ESG data to start</div>
+
+        <div class="upload-zone" id="welcomeUploadZone" onclick="document.getElementById('fileInput').click()">
+          <div class="upload-zone-icon">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+              <polyline points="17 8 12 3 7 8"/>
+              <line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+          </div>
+          <p class="upload-zone-title">Drop a file here to auto-fill</p>
+          <p class="upload-zone-sub">PDF · Excel (.xlsx) · CSV — up to 10 MB</p>
+        </div>
+
+        <p style="font-size:12px;color:var(--ink-light);margin-top:4px;">or type below to begin the conversation</p>
       </div>
     </div>
 
@@ -668,8 +803,13 @@ textarea::placeholder { color: var(--ink-light); }
     </div>
 
     <!-- Input -->
-    <div class="input-area">
-      <div class="input-row">
+    <div class="input-area" id="inputArea">
+      <div class="input-row" id="inputRow">
+        <button class="attach-btn" id="attachBtn" onclick="document.getElementById('fileInput').click()" title="Upload ESG data file">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/>
+          </svg>
+        </button>
         <textarea
           id="chatInput"
           placeholder="Type your answer… (Enter to send, Shift+Enter for new line)"
@@ -705,6 +845,7 @@ const ATTRS = [
 let sessionId = null;
 let isReady = false;
 let progress = {};
+let autoProgress = {};  // tracks which were auto-filled from upload
 let isWaiting = false;
 let started = false;
 
@@ -714,7 +855,8 @@ function renderSidebar() {
 
   rows.innerHTML = ATTRS.map(a => {
     const d = progress[a.key];
-    return `<div class="attr-row ${d ? 'done' : ''}">
+    const isAuto = autoProgress[a.key];
+    return `<div class="attr-row ${d ? 'done' : ''} ${d && isAuto ? 'auto' : ''}">
       <div class="check-circle">
         <svg width="9" height="9" viewBox="0 0 10 10" fill="none">
           <path d="M2 5l2.5 2.5 4-4" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
@@ -745,20 +887,44 @@ function addMessage(role, text) {
   msgs.scrollTop = msgs.scrollHeight;
 }
 
+function addUploadMessage(filename) {
+  const welcome = document.getElementById('welcome');
+  if (welcome) welcome.remove();
+
+  const msgs = document.getElementById('messages');
+  const div = document.createElement('div');
+  div.className = 'message user';
+  div.innerHTML = `
+    <span class="msg-label">You</span>
+    <div class="bubble upload-file-bubble">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity:0.55;flex-shrink:0">
+        <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+        <polyline points="14 2 14 8 20 8"/>
+      </svg>
+      ${esc(filename)}
+    </div>`;
+  msgs.appendChild(div);
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
 function esc(s) {
   return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
-function showTyping() {
+function showTyping(label) {
   const welcome = document.getElementById('welcome');
   if (welcome) welcome.remove();
   const msgs = document.getElementById('messages');
   const div = document.createElement('div');
   div.className = 'message agent';
   div.id = 'typing';
+  const lbl = label || 'Thinking';
   div.innerHTML = `
     <span class="msg-label">DISCLO</span>
-    <div class="bubble"><div class="typing-dots"><span></span><span></span><span></span></div></div>`;
+    <div class="bubble">
+      <div class="typing-dots"><span></span><span></span><span></span></div>
+      ${label ? `<span style="font-size:12px;color:var(--ink-light);margin-left:6px;">${esc(label)}</span>` : ''}
+    </div>`;
   msgs.appendChild(div);
   msgs.scrollTop = msgs.scrollHeight;
 }
@@ -775,6 +941,98 @@ function setReady() {
   document.getElementById('headerGenerateBtn').classList.add('visible');
 }
 
+// ── FILE UPLOAD ───────────────────────────────────────────────────────────
+
+function handleFileSelect(input) {
+  if (input.files && input.files[0]) {
+    handleFileUpload(input.files[0]);
+    input.value = '';
+  }
+}
+
+async function handleFileUpload(file) {
+  const maxSize = 10 * 1024 * 1024;
+  if (file.size > maxSize) {
+    addMessage('agent', 'That file is over 10 MB. Please compress it or paste the key numbers directly.');
+    return;
+  }
+
+  const allowed = ['.pdf', '.xlsx', '.xls', '.csv'];
+  const name = file.name.toLowerCase();
+  if (!allowed.some(ext => name.endsWith(ext))) {
+    addMessage('agent', 'Please upload a PDF, Excel (.xlsx / .xls), or CSV file.');
+    return;
+  }
+
+  if (!started) started = true;
+  setWaiting(true);
+  addUploadMessage(file.name);
+  showTyping('Analysing your document…');
+
+  const formData = new FormData();
+  formData.append('file', file);
+  if (sessionId) formData.append('session_id', sessionId);
+
+  try {
+    const res = await fetch('/upload', { method: 'POST', body: formData });
+    const data = await res.json();
+
+    removeTyping();
+
+    if (!res.ok) {
+      addMessage('agent', data.error || 'Could not process the file. Try pasting the data as text.');
+    } else {
+      sessionId = data.session_id;
+      addMessage('agent', data.message);
+
+      if (data.progress && Object.keys(data.progress).length) {
+        // Mark auto-filled sections
+        Object.keys(data.progress).forEach(k => {
+          if (data.progress[k]) autoProgress[k] = true;
+        });
+        progress = { ...progress, ...data.progress };
+        renderSidebar();
+      }
+      if (data.ready) setReady();
+    }
+  } catch (e) {
+    removeTyping();
+    addMessage('agent', 'Could not reach the server. Check your connection and try again.');
+  }
+
+  setWaiting(false);
+  document.getElementById('chatInput').focus();
+}
+
+// ── DRAG AND DROP ─────────────────────────────────────────────────────────
+
+function setupDropZone() {
+  const zone = document.getElementById('welcomeUploadZone');
+  if (!zone) return;
+  zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+  zone.addEventListener('drop', e => {
+    e.preventDefault();
+    zone.classList.remove('drag-over');
+    if (e.dataTransfer.files[0]) handleFileUpload(e.dataTransfer.files[0]);
+  });
+}
+
+// Also allow dropping onto the input area mid-conversation
+function setupInputDrop() {
+  const area = document.getElementById('inputArea');
+  area.addEventListener('dragover', e => { e.preventDefault(); });
+  area.addEventListener('drop', e => {
+    e.preventDefault();
+    if (e.dataTransfer.files[0]) handleFileUpload(e.dataTransfer.files[0]);
+  });
+}
+
+setupDropZone();
+setupInputDrop();
+
+// ── CHAT ──────────────────────────────────────────────────────────────────
+
 async function sendMessage() {
   const input = document.getElementById('chatInput');
   const text = input.value.trim();
@@ -783,6 +1041,7 @@ async function sendMessage() {
   input.value = '';
   input.style.height = '';
   setWaiting(true);
+  started = true;
   addMessage('user', text);
   showTyping();
 
@@ -797,7 +1056,7 @@ async function sendMessage() {
     removeTyping();
     addMessage('agent', data.message);
     if (data.progress && Object.keys(data.progress).length) {
-      progress = data.progress;
+      progress = { ...progress, ...data.progress };
       renderSidebar();
     }
     if (data.ready) setReady();
@@ -813,6 +1072,7 @@ async function sendMessage() {
 function setWaiting(v) {
   isWaiting = v;
   document.getElementById('sendBtn').disabled = v;
+  document.getElementById('attachBtn').disabled = v;
 }
 
 async function generateReport() {
@@ -848,13 +1108,13 @@ async function generateReport() {
 }
 
 function resetChat() {
-  sessionId = null; isReady = false; progress = {}; started = false;
+  sessionId = null; isReady = false; progress = {}; autoProgress = {}; started = false;
   document.getElementById('messages').innerHTML = `
     <div class="welcome" id="welcome">
       <p class="welcome-wordmark">DISCLO</p>
       <div class="welcome-rule"></div>
       <p class="welcome-sub">BRSR Core Agent</p>
-      <p class="welcome-desc">I'll collect your 40 mandatory KPIs through a conversation. No forms. Tell me what you have.</p>
+      <p class="welcome-desc">Upload your ESG data and I'll extract what I can — then ask only about what's still missing.</p>
       <div class="welcome-tags">
         <span class="welcome-tag">GHG Scope 1 &amp; 2</span>
         <span class="welcome-tag">Water</span>
@@ -863,11 +1123,27 @@ function resetChat() {
         <span class="welcome-tag">Safety</span>
         <span class="welcome-tag">Gender Wages</span>
       </div>
+
+      <div class="upload-sep">or upload your ESG data to start</div>
+
+      <div class="upload-zone" id="welcomeUploadZone" onclick="document.getElementById('fileInput').click()">
+        <div class="upload-zone-icon">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+            <polyline points="17 8 12 3 7 8"/>
+            <line x1="12" y1="3" x2="12" y2="15"/>
+          </svg>
+        </div>
+        <p class="upload-zone-title">Drop a file here to auto-fill</p>
+        <p class="upload-zone-sub">PDF · Excel (.xlsx) · CSV — up to 10 MB</p>
+      </div>
+
+      <p style="font-size:12px;color:var(--ink-light);margin-top:4px;">or type below to begin the conversation</p>
     </div>`;
   document.getElementById('readyBanner').classList.remove('visible');
   document.getElementById('headerGenerateBtn').classList.remove('visible');
   renderSidebar();
-  startConversation();
+  setupDropZone();
 }
 
 function handleKey(e) {
@@ -879,28 +1155,7 @@ function autoResize(el) {
   el.style.height = Math.min(el.scrollHeight, 130) + 'px';
 }
 
-async function startConversation() {
-  if (started) return;
-  started = true;
-  showTyping();
-  try {
-    const res = await fetch('/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ session_id: null, message: '__start__' }),
-    });
-    const data = await res.json();
-    sessionId = data.session_id;
-    removeTyping();
-    addMessage('agent', data.message);
-  } catch (e) {
-    removeTyping();
-    addMessage('agent', 'Ready to help with your BRSR Core report. What is your company name?');
-  }
-}
-
 renderSidebar();
-startConversation();
 </script>
 </body>
 </html>

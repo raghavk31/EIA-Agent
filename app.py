@@ -101,13 +101,118 @@ RESPONSE FORMAT — always respond with ONLY valid JSON, no markdown, no code fe
 Set ready=true only when all 9 progress sections are true."""
 
 
-def call_chat_claude(history: list) -> dict:
+EXTRACTION_SYSTEM_PROMPT = """You are a BRSR Core data extraction specialist. Your only job is to read a document and extract BRSR KPI values from it.
+
+EXTRACTION RULES:
+- Parse Indian number format: remove all commas before storing (47,70,357 → 4770357).
+- Only extract values explicitly present in the document. Never infer or estimate.
+- Identify the company name and financial year from the document.
+- For each metric, extract both current year and previous year if available.
+- Revenue figures: if you see "revenue from operations" in INR crore, extract as revenue_current.
+
+FIELD NAMES — use these exact keys in "extracted":
+Company: company_name (str), financial_year (str e.g. "FY 2024-25"), prev_financial_year (str), cin (str), sector (str), revenue_current (float INR crore), revenue_prev (float)
+GHG (MT CO₂e): scope1_current, scope1_prev, scope2_current, scope2_prev, scope1_co2, scope1_ch4, scope1_n2o, scope1_co2_prev, scope1_ch4_prev, scope1_n2o_prev
+Water (kilolitres): water_surface_fresh_current, water_ground_fresh_current, water_third_fresh_current, water_sea_current, water_other_current, water_withdrawal_prev, water_consumed_current, water_consumed_prev, water_disch_surface, water_disch_ground, water_disch_sea, water_disch_third
+Energy (GJ): energy_nonrenew_current, energy_nonrenew_prev, energy_renew_current, energy_renew_prev
+Waste (MT): waste_hazardous, waste_nonhazardous, waste_plastic, waste_ewaste, waste_biomedical, waste_construction, waste_battery, waste_other_hazardous, waste_other_nonhazardous, waste_total_prev, waste_recycled, waste_reused, waste_landfill
+Safety: ltifr_emp_current, ltifr_emp_prev, fatalities_emp_current, fatalities_emp_prev, highconsequence_emp_current, highconsequence_emp_prev, recordable_emp_current, recordable_emp_prev, manhours_emp_current, ltifr_worker_current, ltifr_worker_prev, fatalities_worker_current, fatalities_worker_prev, highconsequence_worker_current, highconsequence_worker_prev, recordable_worker_current, recordable_worker_prev, wellbeing_emp_pct_current, wellbeing_emp_pct_prev, wellbeing_worker_pct_current, wellbeing_worker_pct_prev
+Gender: female_wages_pct_current, female_wages_pct_prev
+Supply chain (%): msme_pct_current, msme_pct_prev, india_sourcing_pct_current, india_sourcing_pct_prev, smaller_towns_pct_current, smaller_towns_pct_prev
+Customers: data_breach_pct_current, data_breach_count_current, total_cyber_events, ap_days_current, ap_days_prev
+Workforce: perm_emp_male, perm_emp_female, contract_workers_male, contract_workers_female
+Director: director_name (str), director_din (str), director_designation (str)
+
+PROGRESS — mark true if primary metrics for that section are present:
+- company: company_name + financial_year + revenue_current
+- ghg: scope1_current + scope2_current
+- water: water_consumed_current
+- energy: energy_nonrenew_current + energy_renew_current
+- waste: at least one waste type
+- safety: ltifr_emp_current + fatalities_emp_current
+- gender: female_wages_pct_current
+- supply_chain: msme_pct_current
+- customers: ap_days_current
+
+RESPONSE FORMAT — ONLY valid JSON, no markdown, no preamble:
+{
+  "extracted": {},
+  "summary": "One sentence: company name, FY, how many fields found",
+  "message": "2-4 sentences for the user: what was found, which sections are complete, what still needs to be collected. Be specific and professional.",
+  "progress": { "company": false, "ghg": false, "water": false, "energy": false, "waste": false, "safety": false, "gender": false, "supply_chain": false, "customers": false }
+}"""
+
+
+def _extract_text_from_pdf(file_bytes: bytes) -> str:
+    from pdfminer.high_level import extract_text
+    text = extract_text(io.BytesIO(file_bytes))
+    return text[:65000]
+
+
+def _extract_text_from_excel(file_bytes: bytes, filename: str) -> str:
+    if filename.endswith(".csv"):
+        import csv
+        lines = file_bytes.decode("utf-8", errors="replace").splitlines()
+        reader = csv.reader(lines)
+        rows = [" | ".join(str(c) for c in row if str(c).strip()) for row in reader]
+        return "\n".join(rows)[:65000]
+
+    import openpyxl
+    wb = openpyxl.load_workbook(io.BytesIO(file_bytes), read_only=True, data_only=True)
+    parts = []
+    for sheet in wb.worksheets:
+        parts.append(f"\n--- Sheet: {sheet.title} ---")
+        for row in sheet.iter_rows(values_only=True):
+            row_text = " | ".join(str(v) for v in row if v is not None)
+            if row_text.strip():
+                parts.append(row_text)
+    return "\n".join(parts)[:65000]
+
+
+def extract_brsr_fields(doc_text: str, filename: str) -> dict:
+    model = os.environ.get("OPENROUTER_MODEL", "anthropic/claude-sonnet-4-5")
+    user_msg = f"Extract all BRSR Core KPI values from this document ({filename}):\n\n{doc_text}"
+    response = get_client().chat.completions.create(
+        model=model,
+        max_tokens=3000,
+        messages=[
+            {"role": "system", "content": EXTRACTION_SYSTEM_PROMPT},
+            {"role": "user", "content": user_msg},
+        ],
+    )
+    text = response.choices[0].message.content.strip()
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        m = re.search(r'\{[\s\S]*\}', text)
+        if m:
+            try:
+                return json.loads(m.group())
+            except Exception:
+                pass
+    return {
+        "extracted": {},
+        "summary": f"Could not extract structured data from {filename}.",
+        "message": f"I had trouble reading structured data from {filename}. Let's collect your BRSR data through the conversation instead.",
+        "progress": {},
+    }
+
+
+def call_chat_claude(history: list, existing_fields: dict = None) -> dict:
+    system = CHAT_SYSTEM_PROMPT
+    if existing_fields:
+        filled = {k: v for k, v in existing_fields.items() if v is not None and v != ""}
+        if filled:
+            system += (
+                "\n\nALREADY COLLECTED — these fields are pre-filled, do NOT ask about them again:\n"
+                + json.dumps(filled, ensure_ascii=False)
+            )
     model = os.environ.get("OPENROUTER_MODEL", "anthropic/claude-sonnet-4-5")
     response = get_client().chat.completions.create(
         model=model,
         max_tokens=1500,
         messages=[
-            {"role": "system", "content": CHAT_SYSTEM_PROMPT},
+            {"role": "system", "content": system},
             *history,
         ],
     )
@@ -667,7 +772,7 @@ def chat():
     if message and message != "__start__":
         session["history"].append({"role": "user", "content": message})
 
-    result = call_chat_claude(session["history"])
+    result = call_chat_claude(session["history"], existing_fields=session["fields"])
 
     extracted = result.get("extracted") or {}
     if extracted:
@@ -681,6 +786,56 @@ def chat():
         "message": reply,
         "progress": result.get("progress") or {},
         "ready": result.get("ready", False),
+    })
+
+
+@app.route("/upload", methods=["POST"])
+def upload():
+    session_id = request.form.get("session_id")
+    file = request.files.get("file")
+
+    if not file or not file.filename:
+        return jsonify({"error": "No file provided."}), 400
+
+    filename = file.filename.lower()
+    allowed = (".pdf", ".xlsx", ".xls", ".csv")
+    if not any(filename.endswith(ext) for ext in allowed):
+        return jsonify({"error": "Please upload a PDF, Excel (.xlsx/.xls), or CSV file."}), 400
+
+    if not session_id or session_id not in chat_sessions:
+        session_id = str(uuid.uuid4())
+        chat_sessions[session_id] = {"fields": {}, "history": []}
+
+    session = chat_sessions[session_id]
+
+    file_bytes = file.read()
+    try:
+        if filename.endswith(".pdf"):
+            doc_text = _extract_text_from_pdf(file_bytes)
+        else:
+            doc_text = _extract_text_from_excel(file_bytes, filename)
+    except Exception as e:
+        return jsonify({"error": f"Could not read file: {e}"}), 400
+
+    if len(doc_text.strip()) < 100:
+        return jsonify({"error": "The file appears to be empty or could not be read."}), 400
+
+    result = extract_brsr_fields(doc_text, file.filename)
+
+    extracted = result.get("extracted") or {}
+    if extracted:
+        session["fields"].update(extracted)
+
+    # Add to conversation history so the chat agent has context
+    reply = result.get("message") or f"I've analysed {file.filename}. Let's fill in what's still missing."
+    session["history"].append({"role": "assistant", "content": reply})
+
+    return jsonify({
+        "session_id": session_id,
+        "message": reply,
+        "progress": result.get("progress") or {},
+        "fields_found": len(extracted),
+        "ready": False,
     })
 
 
