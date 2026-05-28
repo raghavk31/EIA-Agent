@@ -639,6 +639,11 @@ def _generate_pdf_response(data: dict):
 
 @app.route("/")
 def index():
+    return send_file("landing.html")
+
+
+@app.route("/app")
+def agent_app():
     return send_file("chat.html")
 
 

@@ -3,777 +3,673 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>BRSR Agent — SEBI Compliance Report Generator</title>
+<title>DISCLO — BRSR Core Agent</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400;1,600&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet">
 <style>
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-  :root {
-    --sky: #0ea5e9;
-    --sky-dark: #0284c7;
-    --sky-pale: #f0f9ff;
-    --ink: #0f172a;
-    --ink-mid: #475569;
-    --ink-light: #94a3b8;
-    --border: #e2e8f0;
-    --surface: #f8fafc;
-    --white: #ffffff;
-    --green: #22c55e;
-    --green-pale: #f0fdf4;
-    --amber: #f59e0b;
-    --radius-sm: 8px;
-    --radius-md: 14px;
-    --radius-lg: 20px;
-    --shadow-sm: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
-    --shadow-md: 0 4px 12px rgba(0,0,0,0.08), 0 2px 4px rgba(0,0,0,0.04);
-  }
-
-  body {
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-    background: var(--surface);
-    height: 100dvh;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    color: var(--ink);
-    -webkit-font-smoothing: antialiased;
-  }
-
-  /* ── HEADER ── */
-  header {
-    background: var(--white);
-    border-bottom: 1px solid var(--border);
-    padding: 0 24px;
-    height: 60px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    flex-shrink: 0;
-    z-index: 10;
-  }
-
-  .logo {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
-
-  .logo-mark {
-    width: 32px;
-    height: 32px;
-    background: linear-gradient(135deg, var(--sky) 0%, #38bdf8 100%);
-    border-radius: var(--radius-sm);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-  }
-
-  .logo-mark svg { display: block; }
-
-  .logo-text h1 {
-    font-size: 15px;
-    font-weight: 600;
-    color: var(--ink);
-    line-height: 1.2;
-    letter-spacing: -0.01em;
-  }
-
-  .logo-text p {
-    font-size: 11px;
-    color: var(--ink-light);
-    letter-spacing: 0.02em;
-  }
-
-  .header-right {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
-
-  .new-chat-btn {
-    background: none;
-    border: 1px solid var(--border);
-    color: var(--ink-mid);
-    font-family: inherit;
-    font-size: 13px;
-    font-weight: 500;
-    padding: 7px 14px;
-    border-radius: var(--radius-sm);
-    cursor: pointer;
-    transition: all 0.15s ease;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-  }
-
-  .new-chat-btn:hover {
-    border-color: var(--ink-light);
-    color: var(--ink);
-  }
-
-  .generate-btn {
-    background: var(--sky);
-    color: var(--white);
-    border: none;
-    font-family: inherit;
-    font-size: 13px;
-    font-weight: 600;
-    padding: 8px 18px;
-    border-radius: var(--radius-sm);
-    cursor: pointer;
-    transition: all 0.15s ease;
-    display: none;
-    align-items: center;
-    gap: 7px;
-    letter-spacing: -0.01em;
-  }
-
-  .generate-btn.visible {
-    display: flex;
-  }
-
-  .generate-btn:hover:not(:disabled) {
-    background: var(--sky-dark);
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(14, 165, 233, 0.3);
-  }
-
-  .generate-btn:disabled {
-    opacity: 0.7;
-    cursor: not-allowed;
-  }
-
-  /* ── MAIN LAYOUT ── */
-  .main {
-    display: flex;
-    flex: 1;
-    overflow: hidden;
-  }
-
-  /* ── SIDEBAR ── */
-  .sidebar {
-    width: 248px;
-    background: var(--white);
-    border-right: 1px solid var(--border);
-    display: flex;
-    flex-direction: column;
-    flex-shrink: 0;
-    overflow-y: auto;
-  }
-
-  .sidebar-inner {
-    padding: 20px 16px;
-    flex: 1;
-  }
-
-  .sidebar-section-title {
-    font-size: 10px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    color: var(--ink-light);
-    margin-bottom: 10px;
-    padding: 0 4px;
-  }
-
-  .attr-list {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-  }
-
-  .attr-item {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 8px 10px;
-    border-radius: var(--radius-sm);
-    transition: background 0.15s;
-    cursor: default;
-  }
-
-  .attr-item.done { background: var(--green-pale); }
-  .attr-item.active { background: var(--sky-pale); }
-
-  .check-ring {
-    width: 18px;
-    height: 18px;
-    border-radius: 50%;
-    border: 2px solid var(--border);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    transition: all 0.2s ease;
-    background: var(--white);
-  }
-
-  .attr-item.done .check-ring {
-    background: var(--green);
-    border-color: var(--green);
-  }
-
-  .attr-item.active .check-ring {
-    border-color: var(--sky);
-  }
-
-  .check-ring svg { display: none; }
-  .attr-item.done .check-ring svg { display: block; }
-
-  .attr-label {
-    font-size: 13px;
-    color: var(--ink-mid);
-    font-weight: 400;
-    line-height: 1.2;
-  }
-
-  .attr-item.done .attr-label { color: #16a34a; font-weight: 500; }
-  .attr-item.active .attr-label { color: var(--sky-dark); font-weight: 500; }
-
-  .sidebar-divider {
-    height: 1px;
-    background: var(--border);
-    margin: 16px 0;
-  }
-
-  .sidebar-hint {
-    font-size: 11.5px;
-    color: var(--ink-light);
-    line-height: 1.5;
-    padding: 0 4px;
-  }
-
-  /* ── CHAT AREA ── */
-  .chat-area {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    background: var(--surface);
-  }
-
-  .messages {
-    flex: 1;
-    overflow-y: auto;
-    padding: 32px 40px;
-    display: flex;
-    flex-direction: column;
-    gap: 24px;
-    scroll-behavior: smooth;
-  }
-
-  .messages::-webkit-scrollbar { width: 4px; }
-  .messages::-webkit-scrollbar-track { background: transparent; }
-  .messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
-
-  /* ── WELCOME SCREEN ── */
-  .welcome {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    flex: 1;
-    text-align: center;
-    padding: 40px;
-    gap: 12px;
-  }
-
-  .welcome-icon {
-    width: 48px;
-    height: 48px;
-    background: linear-gradient(135deg, var(--sky) 0%, #38bdf8 100%);
-    border-radius: 14px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin-bottom: 4px;
-  }
-
-  .welcome h2 {
-    font-size: 20px;
-    font-weight: 600;
-    color: var(--ink);
-    letter-spacing: -0.02em;
-  }
-
-  .welcome p {
-    font-size: 14px;
-    color: var(--ink-mid);
-    max-width: 380px;
-    line-height: 1.6;
-  }
-
-  .welcome-chips {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    justify-content: center;
-    margin-top: 8px;
-  }
-
-  .chip {
-    background: var(--white);
-    border: 1px solid var(--border);
-    border-radius: 100px;
-    padding: 6px 14px;
-    font-size: 12.5px;
-    color: var(--ink-mid);
-    font-weight: 500;
-  }
-
-  /* ── MESSAGE BUBBLES ── */
-  .message {
-    display: flex;
-    align-items: flex-start;
-    gap: 12px;
-    max-width: 680px;
-    animation: fadeIn 0.2s ease;
-  }
-
-  @keyframes fadeIn {
-    from { opacity: 0; transform: translateY(6px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
-
-  .message.user {
-    flex-direction: row-reverse;
-    align-self: flex-end;
-  }
-
-  .avatar {
-    width: 34px;
-    height: 34px;
-    border-radius: 50%;
-    flex-shrink: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-weight: 600;
-    font-size: 13px;
-    letter-spacing: -0.01em;
-  }
-
-  .avatar.agent {
-    background: linear-gradient(135deg, var(--sky) 0%, #38bdf8 100%);
-    color: var(--white);
-  }
-
-  .avatar.user {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    color: var(--ink-mid);
-  }
-
-  .bubble {
-    padding: 13px 17px;
-    border-radius: var(--radius-md);
-    line-height: 1.65;
-    font-size: 14px;
-  }
-
-  .agent .bubble {
-    background: var(--white);
-    border: 1px solid var(--border);
-    color: var(--ink);
-    border-radius: 4px var(--radius-md) var(--radius-md) var(--radius-md);
-    box-shadow: var(--shadow-sm);
-  }
-
-  .user .bubble {
-    background: var(--sky);
-    color: var(--white);
-    border-radius: var(--radius-md) 4px var(--radius-md) var(--radius-md);
-  }
-
-  /* ── TYPING INDICATOR ── */
-  .typing-dots {
-    display: flex;
-    gap: 5px;
-    padding: 6px 2px;
-  }
-
-  .typing-dots span {
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: var(--ink-light);
-    animation: bounce 1.3s ease infinite;
-  }
-
-  .typing-dots span:nth-child(2) { animation-delay: 0.18s; }
-  .typing-dots span:nth-child(3) { animation-delay: 0.36s; }
-
-  @keyframes bounce {
-    0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
-    30% { transform: translateY(-7px); opacity: 1; }
-  }
-
-  /* ── INPUT AREA ── */
-  .input-area {
-    border-top: 1px solid var(--border);
-    background: var(--white);
-    padding: 14px 40px 18px;
-    flex-shrink: 0;
-  }
-
-  .input-container {
-    display: flex;
-    align-items: flex-end;
-    gap: 10px;
-    background: var(--surface);
-    border: 1.5px solid var(--border);
-    border-radius: var(--radius-lg);
-    padding: 10px 10px 10px 18px;
-    transition: border-color 0.15s ease, box-shadow 0.15s ease;
-  }
-
-  .input-container:focus-within {
-    border-color: var(--sky);
-    background: var(--white);
-    box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.08);
-  }
-
-  textarea {
-    flex: 1;
-    border: none;
-    background: none;
-    resize: none;
-    font-size: 14px;
-    line-height: 1.55;
-    color: var(--ink);
-    outline: none;
-    font-family: inherit;
-    min-height: 22px;
-    max-height: 130px;
-    overflow-y: auto;
-  }
-
-  textarea::placeholder { color: var(--ink-light); }
-
-  .send-btn {
-    width: 36px;
-    height: 36px;
-    border-radius: 50%;
-    background: var(--sky);
-    border: none;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    transition: all 0.15s ease;
-  }
-
-  .send-btn:hover:not(:disabled) {
-    background: var(--sky-dark);
-    transform: scale(1.05);
-  }
-
-  .send-btn:disabled {
-    background: var(--border);
-    cursor: not-allowed;
-  }
-
-  .input-hint {
-    text-align: center;
-    font-size: 11.5px;
-    color: var(--ink-light);
-    margin-top: 8px;
-  }
-
-  /* ── LOADING OVERLAY ── */
-  .loading-overlay {
-    position: fixed;
-    inset: 0;
-    background: rgba(255, 255, 255, 0.88);
-    backdrop-filter: blur(8px);
-    z-index: 100;
-    display: none;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 16px;
-  }
-
-  .loading-overlay.visible { display: flex; }
-
-  .spinner {
-    width: 44px;
-    height: 44px;
-    border: 3px solid var(--border);
-    border-top-color: var(--sky);
-    border-radius: 50%;
-    animation: spin 0.8s linear infinite;
-  }
-
-  @keyframes spin { to { transform: rotate(360deg); } }
-
-  .loading-title {
-    font-size: 16px;
-    font-weight: 600;
-    color: var(--ink);
-    letter-spacing: -0.01em;
-  }
-
-  .loading-sub {
-    font-size: 13px;
-    color: var(--ink-mid);
-    max-width: 300px;
-    text-align: center;
-    line-height: 1.5;
-  }
-
-  /* ── READY BANNER ── */
-  .ready-banner {
-    display: none;
-    background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
-    border-top: 1px solid #bbf7d0;
-    padding: 14px 40px;
-    align-items: center;
-    justify-content: space-between;
-    gap: 16px;
-    flex-shrink: 0;
-  }
-
-  .ready-banner.visible { display: flex; }
-
-  .ready-banner-text {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    font-size: 14px;
-    font-weight: 500;
-    color: #16a34a;
-  }
-
-  .ready-badge {
-    background: var(--green);
-    color: var(--white);
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    padding: 3px 8px;
-    border-radius: 100px;
-  }
-
-  .ready-generate-btn {
-    background: #16a34a;
-    color: var(--white);
-    border: none;
-    font-family: inherit;
-    font-size: 14px;
-    font-weight: 600;
-    padding: 10px 22px;
-    border-radius: var(--radius-sm);
-    cursor: pointer;
-    transition: all 0.15s ease;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    letter-spacing: -0.01em;
-    white-space: nowrap;
-  }
-
-  .ready-generate-btn:hover:not(:disabled) {
-    background: #15803d;
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(22, 163, 74, 0.3);
-  }
-
-  .ready-generate-btn:disabled {
-    opacity: 0.7;
-    cursor: not-allowed;
-  }
-
-  /* ── PROGRESS BAR ── */
-  .progress-bar-wrap {
-    margin-top: 16px;
-    padding-top: 16px;
-    border-top: 1px solid var(--border);
-  }
-
-  .progress-bar-label {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 6px;
-  }
-
-  .progress-bar-label span:first-child {
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--ink-light);
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-  }
-
-  .progress-bar-label span:last-child {
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--ink-mid);
-  }
-
-  .progress-track {
-    height: 5px;
-    background: var(--border);
-    border-radius: 100px;
-    overflow: hidden;
-  }
-
-  .progress-fill {
-    height: 100%;
-    background: linear-gradient(90deg, var(--sky) 0%, var(--green) 100%);
-    border-radius: 100px;
-    transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
-    width: 0%;
-  }
-
-  /* ── SEBI BADGE ── */
-  .sebi-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    background: #fffbeb;
-    border: 1px solid #fde68a;
-    color: #92400e;
-    font-size: 11px;
-    font-weight: 500;
-    padding: 4px 10px;
-    border-radius: 100px;
-    margin-top: 12px;
-  }
-
-  .sebi-dot {
-    width: 6px;
-    height: 6px;
-    background: var(--amber);
-    border-radius: 50%;
-    animation: pulse 2s ease-in-out infinite;
-  }
-
-  @keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.4; }
-  }
-
-  /* ── RESPONSIVE ── */
-  @media (max-width: 768px) {
-    .sidebar { display: none; }
-    .messages { padding: 20px 16px; }
-    .input-area { padding: 12px 16px 16px; }
-    .ready-banner { padding: 12px 16px; flex-direction: column; align-items: stretch; }
-    .ready-generate-btn { justify-content: center; }
-  }
+
+:root {
+  --paper:         #F7F5F2;
+  --ink:           #191917;
+  --ink-mid:       #4A4845;
+  --ink-light:     #8A8680;
+  --surface-ruled: #F0EDE8;
+  --surface-dark:  #1A1F2E;
+  --verdigris:     #4A7C6F;
+  --amber:         #C4933A;
+  --border:        rgba(25,25,23,0.1);
+  --border-dark:   rgba(255,255,255,0.08);
+  --white:         #ffffff;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'DM Sans', -apple-system, sans-serif;
+  background: var(--paper);
+  color: var(--ink);
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── HEADER ─────────────────────────────────────────────────────────────── */
+header {
+  background: var(--surface-dark);
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 28px;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border-dark);
+}
+
+.header-brand {
+  display: flex;
+  flex-direction: column;
+  line-height: 1;
+}
+
+.header-brand .wordmark {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--paper);
+  letter-spacing: -0.01em;
+}
+
+.header-brand .sub {
+  font-size: 10px;
+  color: rgba(255,255,255,0.3);
+  margin-top: 2px;
+  font-family: 'DM Sans', sans-serif;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.back-link {
+  font-size: 12px;
+  color: rgba(255,255,255,0.35);
+  text-decoration: none;
+  font-family: 'DM Sans', sans-serif;
+  letter-spacing: 0.01em;
+  transition: color 0.18s;
+}
+.back-link:hover { color: rgba(255,255,255,0.7); }
+
+.new-session-btn {
+  background: none;
+  border: 1px solid rgba(255,255,255,0.15);
+  color: rgba(255,255,255,0.45);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 12px;
+  padding: 5px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.18s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.new-session-btn:hover {
+  border-color: rgba(255,255,255,0.3);
+  color: rgba(255,255,255,0.7);
+}
+
+.generate-btn {
+  background: var(--verdigris);
+  color: var(--paper);
+  border: none;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 7px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  display: none;
+  align-items: center;
+  gap: 7px;
+  letter-spacing: -0.01em;
+  transition: opacity 0.18s;
+}
+.generate-btn.visible { display: flex; }
+.generate-btn:hover:not(:disabled) { opacity: 0.85; }
+.generate-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ── MAIN LAYOUT ─────────────────────────────────────────────────────────── */
+.main {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* ── SIDEBAR ─────────────────────────────────────────────────────────────── */
+.sidebar {
+  width: 252px;
+  background: var(--paper);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  overflow-y: auto;
+}
+
+.sidebar-inner {
+  padding: 24px 20px;
+  flex: 1;
+}
+
+.sidebar-label {
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--ink-light);
+  margin-bottom: 16px;
+  display: block;
+}
+
+/* Attribute rows — credential-row style from landing */
+.attr-rows {
+  border-top: 1px solid var(--border);
+}
+
+.attr-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.check-circle {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1.5px solid var(--border);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  background: transparent;
+}
+
+.attr-row.done .check-circle {
+  background: var(--verdigris);
+  border-color: var(--verdigris);
+}
+
+.check-circle svg { display: none; }
+.attr-row.done .check-circle svg { display: block; }
+
+.attr-name {
+  font-size: 13px;
+  color: var(--ink-mid);
+  line-height: 1.2;
+  flex: 1;
+}
+
+.attr-row.done .attr-name {
+  color: var(--ink);
+  font-weight: 500;
+}
+
+/* Progress */
+.sidebar-progress {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.progress-label-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 8px;
+}
+
+.progress-label {
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--ink-light);
+}
+
+.progress-count {
+  font-family: 'Cormorant Garamond', serif;
+  font-style: italic;
+  font-size: 15px;
+  color: var(--ink-mid);
+}
+
+.progress-track {
+  height: 3px;
+  background: var(--border);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: var(--verdigris);
+  border-radius: 2px;
+  width: 0%;
+  transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.sebi-ref {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  font-size: 10px;
+  color: var(--ink-light);
+  line-height: 1.6;
+}
+
+/* ── CHAT AREA ───────────────────────────────────────────────────────────── */
+.chat-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--paper);
+}
+
+.messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 40px 52px;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  scroll-behavior: smooth;
+}
+
+.messages::-webkit-scrollbar { width: 3px; }
+.messages::-webkit-scrollbar-track { background: transparent; }
+.messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+/* ── WELCOME ─────────────────────────────────────────────────────────────── */
+.welcome {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  text-align: center;
+  padding: 40px;
+  gap: 10px;
+}
+
+.welcome-wordmark {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 48px;
+  font-weight: 400;
+  color: var(--ink);
+  letter-spacing: -0.02em;
+  line-height: 1;
+  margin-bottom: 4px;
+}
+
+.welcome-rule {
+  width: 40px;
+  height: 1px;
+  background: var(--border);
+  margin: 8px auto;
+}
+
+.welcome-sub {
+  font-size: 13px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--ink-light);
+  margin-bottom: 8px;
+}
+
+.welcome-desc {
+  font-size: 15px;
+  color: var(--ink-mid);
+  max-width: 360px;
+  line-height: 1.65;
+}
+
+.welcome-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: center;
+  margin-top: 12px;
+}
+
+.welcome-tag {
+  background: var(--surface-ruled);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  padding: 5px 12px;
+  font-size: 11.5px;
+  color: var(--ink-mid);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+/* ── MESSAGES ────────────────────────────────────────────────────────────── */
+.message {
+  display: flex;
+  flex-direction: column;
+  animation: fadeMessage 0.25s ease;
+}
+
+@keyframes fadeMessage {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.message.user { align-items: flex-end; }
+
+.msg-label {
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 6px;
+}
+
+.message.agent .msg-label { color: var(--verdigris); padding-left: 2px; }
+.message.user  .msg-label { color: var(--ink-light); padding-right: 2px; }
+
+.bubble {
+  font-size: 14px;
+  line-height: 1.7;
+  padding: 16px 20px;
+  max-width: 600px;
+}
+
+.agent .bubble {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 2px 10px 10px 10px;
+  color: var(--ink);
+}
+
+.user .bubble {
+  background: var(--surface-dark);
+  color: rgba(255,255,255,0.85);
+  border-radius: 10px 2px 10px 10px;
+}
+
+/* ── TYPING ──────────────────────────────────────────────────────────────── */
+.typing-dots {
+  display: flex;
+  gap: 5px;
+  padding: 8px 2px;
+  align-items: center;
+}
+
+.typing-dots span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ink-light);
+  animation: dotBounce 1.3s ease infinite;
+}
+
+.typing-dots span:nth-child(2) { animation-delay: 0.18s; }
+.typing-dots span:nth-child(3) { animation-delay: 0.36s; }
+
+@keyframes dotBounce {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.35; }
+  30% { transform: translateY(-7px); opacity: 1; }
+}
+
+/* ── READY BANNER ────────────────────────────────────────────────────────── */
+.ready-banner {
+  display: none;
+  background: var(--surface-ruled);
+  border-top: 1px solid var(--border);
+  padding: 14px 52px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-shrink: 0;
+}
+
+.ready-banner.visible { display: flex; }
+
+.ready-text {
+  font-size: 14px;
+  color: var(--ink-mid);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.ready-badge {
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--verdigris);
+  border: 1px solid var(--verdigris);
+  padding: 3px 8px;
+  border-radius: 2px;
+}
+
+.ready-generate-btn {
+  background: var(--surface-dark);
+  color: var(--paper);
+  border: none;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 10px 22px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: opacity 0.18s;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+  letter-spacing: -0.01em;
+}
+.ready-generate-btn:hover:not(:disabled) { opacity: 0.85; }
+.ready-generate-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ── INPUT ───────────────────────────────────────────────────────────────── */
+.input-area {
+  border-top: 1px solid var(--border);
+  background: var(--paper);
+  padding: 16px 52px 20px;
+  flex-shrink: 0;
+}
+
+.input-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 12px 12px 12px 18px;
+  transition: border-color 0.18s;
+}
+
+.input-row:focus-within {
+  border-color: var(--ink-mid);
+}
+
+textarea {
+  flex: 1;
+  border: none;
+  background: none;
+  resize: none;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--ink);
+  outline: none;
+  font-family: 'DM Sans', sans-serif;
+  min-height: 22px;
+  max-height: 130px;
+  overflow-y: auto;
+}
+
+textarea::placeholder { color: var(--ink-light); }
+
+.send-btn {
+  width: 34px;
+  height: 34px;
+  background: var(--surface-dark);
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: opacity 0.18s;
+}
+
+.send-btn:hover:not(:disabled) { opacity: 0.8; }
+.send-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+.input-hint {
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--ink-light);
+  text-align: center;
+}
+
+/* ── LOADING OVERLAY ─────────────────────────────────────────────────────── */
+.loading-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(247,245,242,0.92);
+  backdrop-filter: blur(10px);
+  z-index: 100;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  text-align: center;
+  padding: 40px;
+}
+
+.loading-overlay.visible { display: flex; }
+
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 2px solid var(--border);
+  border-top-color: var(--verdigris);
+  border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.loading-headline {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 28px;
+  font-weight: 400;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+}
+
+.loading-sub {
+  font-size: 13px;
+  color: var(--ink-mid);
+  max-width: 300px;
+  line-height: 1.6;
+}
+
+/* ── RESPONSIVE ──────────────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .sidebar { display: none; }
+  .messages { padding: 24px 20px; gap: 20px; }
+  .input-area { padding: 12px 20px 16px; }
+  .ready-banner { padding: 12px 20px; flex-direction: column; align-items: stretch; }
+  .ready-generate-btn { justify-content: center; }
+  .bubble { max-width: 100%; }
+}
+
 </style>
 </head>
 <body>
 
-<!-- Loading overlay (report generation) -->
+<!-- Loading overlay -->
 <div class="loading-overlay" id="loadingOverlay">
-  <div class="spinner"></div>
-  <p class="loading-title">Generating your BRSR Core report…</p>
+  <div class="loading-spinner"></div>
+  <p class="loading-headline">Generating your BRSR Core report…</p>
   <p class="loading-sub">Claude is drafting all 40 KPIs and Section A/B/C disclosures. This takes 60–120 seconds.</p>
 </div>
 
+<!-- Header -->
 <header>
-  <div class="logo">
-    <div class="logo-mark">
-      <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-        <path d="M3 9h12M9 3v12M5.5 5.5l7 7M12.5 5.5l-7 7" stroke="white" stroke-width="1.6" stroke-linecap="round"/>
-      </svg>
-    </div>
-    <div class="logo-text">
-      <h1>BRSR Agent</h1>
-      <p>SEBI Core Compliance · FY 2024-25</p>
-    </div>
+  <div class="header-brand">
+    <span class="wordmark">DISCLO</span>
+    <span class="sub">BRSR Core Agent</span>
   </div>
   <div class="header-right">
-    <button class="new-chat-btn" onclick="resetChat()">
-      <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
-        <path d="M2 8a6 6 0 1 1 1.5 4"/>
-        <path d="M2 12V8h4"/>
-      </svg>
+    <a href="/" class="back-link">← Overview</a>
+    <button class="new-session-btn" onclick="resetChat()">
+      <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M2 8a6 6 0 1 1 1.5 4"/><path d="M2 12V8h4"/></svg>
       New session
     </button>
     <button class="generate-btn" id="headerGenerateBtn" onclick="generateReport()">
-      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M8 1v10M4 7l4 4 4-4M2 14h12"/>
-      </svg>
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1v10M4 7l4 4 4-4M2 14h12"/></svg>
       Download Report
     </button>
   </div>
 </header>
 
 <div class="main">
+
   <!-- Sidebar -->
   <aside class="sidebar">
     <div class="sidebar-inner">
-      <p class="sidebar-section-title">Data collection</p>
-      <div class="attr-list" id="progressList"></div>
+      <span class="sidebar-label">Data collection</span>
 
-      <div class="progress-bar-wrap">
-        <div class="progress-bar-label">
-          <span>Overall</span>
-          <span id="progressPct">0 / 9</span>
+      <div class="attr-rows" id="attrRows"></div>
+
+      <div class="sidebar-progress">
+        <div class="progress-label-row">
+          <span class="progress-label">Progress</span>
+          <span class="progress-count" id="progressCount">0 of 9</span>
         </div>
         <div class="progress-track">
           <div class="progress-fill" id="progressFill"></div>
         </div>
       </div>
 
-      <div class="sidebar-divider"></div>
-      <p class="sidebar-hint">Answer each question in plain language — the agent understands Indian number formats (lakh, crore).</p>
-
-      <div class="sebi-badge">
-        <div class="sebi-dot"></div>
-        SEBI BRSR Core · 40 KPIs
-      </div>
+      <p class="sebi-ref">SEBI Circular<br>SEBI/HO/CFD/CFD-SEC-2/<br>P/CIR/2023/122<br>· BRSR Core · 40 KPIs</p>
     </div>
   </aside>
 
   <!-- Chat -->
   <div class="chat-area">
     <div class="messages" id="messages">
-      <!-- Welcome state shown before conversation starts -->
       <div class="welcome" id="welcome">
-        <div class="welcome-icon">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
-          </svg>
-        </div>
-        <h2>Your BRSR Core agent</h2>
-        <p>I'll collect the 40 mandatory KPIs for your SEBI BRSR Core disclosure — through a conversation, not a 200-field form.</p>
-        <div class="welcome-chips">
-          <span class="chip">GHG emissions</span>
-          <span class="chip">Water</span>
-          <span class="chip">Energy</span>
-          <span class="chip">Waste</span>
-          <span class="chip">Safety</span>
-          <span class="chip">Gender wages</span>
+        <p class="welcome-wordmark">DISCLO</p>
+        <div class="welcome-rule"></div>
+        <p class="welcome-sub">BRSR Core Agent</p>
+        <p class="welcome-desc">I'll collect your 40 mandatory KPIs through a conversation. No forms. Tell me what you have.</p>
+        <div class="welcome-tags">
+          <span class="welcome-tag">GHG Scope 1 &amp; 2</span>
+          <span class="welcome-tag">Water</span>
+          <span class="welcome-tag">Energy</span>
+          <span class="welcome-tag">Waste</span>
+          <span class="welcome-tag">Safety</span>
+          <span class="welcome-tag">Gender Wages</span>
         </div>
       </div>
     </div>
 
     <!-- Ready banner -->
     <div class="ready-banner" id="readyBanner">
-      <div class="ready-banner-text">
-        <span class="ready-badge">Ready</span>
-        All BRSR sections covered — your report is ready to generate.
+      <div class="ready-text">
+        <span class="ready-badge">Complete</span>
+        All 9 BRSR sections covered. Report ready to generate.
       </div>
       <button class="ready-generate-btn" id="bannerGenerateBtn" onclick="generateReport()">
-        <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M8 1v10M4 7l4 4 4-4M2 14h12"/>
-        </svg>
+        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1v10M4 7l4 4 4-4M2 14h12"/></svg>
         Download BRSR Core PDF
       </button>
     </div>
 
     <!-- Input -->
     <div class="input-area">
-      <div class="input-container">
+      <div class="input-row">
         <textarea
           id="chatInput"
           placeholder="Type your answer… (Enter to send, Shift+Enter for new line)"
@@ -781,265 +677,230 @@
           onkeydown="handleKey(event)"
           oninput="autoResize(this)"
         ></textarea>
-        <button class="send-btn" id="sendBtn" onclick="sendMessage()" title="Send">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="22" y1="2" x2="11" y2="13"></line>
-            <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+        <button class="send-btn" id="sendBtn" onclick="sendMessage()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
           </svg>
         </button>
       </div>
-      <p class="input-hint">Powered by Claude · Data stays in your session · Not stored permanently</p>
+      <p class="input-hint">Powered by Claude · Session data not stored permanently</p>
     </div>
   </div>
+
 </div>
 
 <script>
-  const ATTRS = [
-    { key: 'company',      label: 'Company info' },
-    { key: 'ghg',          label: 'GHG emissions' },
-    { key: 'water',        label: 'Water' },
-    { key: 'energy',       label: 'Energy' },
-    { key: 'waste',        label: 'Waste' },
-    { key: 'safety',       label: 'Safety & wellbeing' },
-    { key: 'gender',       label: 'Gender wages' },
-    { key: 'supply_chain', label: 'Supply chain' },
-    { key: 'customers',    label: 'Customers' },
-  ];
+const ATTRS = [
+  { key: 'company',      label: 'Company info' },
+  { key: 'ghg',          label: 'GHG emissions' },
+  { key: 'water',        label: 'Water' },
+  { key: 'energy',       label: 'Energy' },
+  { key: 'waste',        label: 'Waste' },
+  { key: 'safety',       label: 'Safety &amp; wellbeing' },
+  { key: 'gender',       label: 'Gender wages' },
+  { key: 'supply_chain', label: 'Supply chain' },
+  { key: 'customers',    label: 'Customers' },
+];
 
-  let sessionId = null;
-  let isReady = false;
-  let progress = {};
-  let isWaiting = false;
-  let conversationStarted = false;
+let sessionId = null;
+let isReady = false;
+let progress = {};
+let isWaiting = false;
+let started = false;
 
-  // ── Render sidebar progress ──
-  function renderProgress() {
-    const list = document.getElementById('progressList');
-    const doneCount = Object.values(progress).filter(Boolean).length;
+function renderSidebar() {
+  const rows = document.getElementById('attrRows');
+  const done = Object.values(progress).filter(Boolean).length;
 
-    list.innerHTML = ATTRS.map(a => {
-      const done = progress[a.key];
-      return `
-        <div class="attr-item ${done ? 'done' : ''}">
-          <div class="check-ring">
-            <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-              <path d="M2 5l2.5 2.5 4-4" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-          </div>
-          <span class="attr-label">${a.label}</span>
-        </div>`;
-    }).join('');
+  rows.innerHTML = ATTRS.map(a => {
+    const d = progress[a.key];
+    return `<div class="attr-row ${d ? 'done' : ''}">
+      <div class="check-circle">
+        <svg width="9" height="9" viewBox="0 0 10 10" fill="none">
+          <path d="M2 5l2.5 2.5 4-4" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <span class="attr-name">${a.label}</span>
+    </div>`;
+  }).join('');
 
-    document.getElementById('progressPct').textContent = `${doneCount} / 9`;
-    document.getElementById('progressFill').style.width = `${Math.round(doneCount / 9 * 100)}%`;
-  }
+  document.getElementById('progressCount').textContent = `${done} of 9`;
+  document.getElementById('progressFill').style.width = `${Math.round(done / 9 * 100)}%`;
+}
 
-  // ── Add a chat message ──
-  function addMessage(role, text) {
-    const welcome = document.getElementById('welcome');
-    if (welcome) welcome.remove();
+function addMessage(role, text) {
+  const welcome = document.getElementById('welcome');
+  if (welcome) welcome.remove();
 
-    const msgs = document.getElementById('messages');
-    const div = document.createElement('div');
-    div.className = `message ${role}`;
+  const msgs = document.getElementById('messages');
+  const div = document.createElement('div');
+  div.className = `message ${role}`;
 
-    const initials = role === 'agent' ? 'B' : 'Y';
-    div.innerHTML = `
-      <div class="avatar ${role}">${initials}</div>
-      <div class="bubble">${escapeHtml(text).replace(/\n/g, '<br>')}</div>`;
+  const label = role === 'agent' ? 'DISCLO' : 'You';
+  div.innerHTML = `
+    <span class="msg-label">${label}</span>
+    <div class="bubble">${esc(text).replace(/\n/g, '<br>')}</div>`;
 
-    msgs.appendChild(div);
-    msgs.scrollTop = msgs.scrollHeight;
-  }
+  msgs.appendChild(div);
+  msgs.scrollTop = msgs.scrollHeight;
+}
 
-  function escapeHtml(str) {
-    return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-  }
+function esc(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
 
-  // ── Typing indicator ──
-  function showTyping() {
-    const welcome = document.getElementById('welcome');
-    if (welcome) welcome.remove();
+function showTyping() {
+  const welcome = document.getElementById('welcome');
+  if (welcome) welcome.remove();
+  const msgs = document.getElementById('messages');
+  const div = document.createElement('div');
+  div.className = 'message agent';
+  div.id = 'typing';
+  div.innerHTML = `
+    <span class="msg-label">DISCLO</span>
+    <div class="bubble"><div class="typing-dots"><span></span><span></span><span></span></div></div>`;
+  msgs.appendChild(div);
+  msgs.scrollTop = msgs.scrollHeight;
+}
 
-    const msgs = document.getElementById('messages');
-    const div = document.createElement('div');
-    div.className = 'message agent';
-    div.id = 'typingIndicator';
-    div.innerHTML = `
-      <div class="avatar agent">B</div>
-      <div class="bubble"><div class="typing-dots"><span></span><span></span><span></span></div></div>`;
-    msgs.appendChild(div);
-    msgs.scrollTop = msgs.scrollHeight;
-  }
+function removeTyping() {
+  const t = document.getElementById('typing');
+  if (t) t.remove();
+}
 
-  function removeTyping() {
-    const t = document.getElementById('typingIndicator');
-    if (t) t.remove();
-  }
+function setReady() {
+  if (isReady) return;
+  isReady = true;
+  document.getElementById('readyBanner').classList.add('visible');
+  document.getElementById('headerGenerateBtn').classList.add('visible');
+}
 
-  // ── Set ready state ──
-  function setReady() {
-    if (isReady) return;
-    isReady = true;
-    document.getElementById('readyBanner').classList.add('visible');
-    document.getElementById('headerGenerateBtn').classList.add('visible');
-  }
+async function sendMessage() {
+  const input = document.getElementById('chatInput');
+  const text = input.value.trim();
+  if (!text || isWaiting) return;
 
-  // ── Send message ──
-  async function sendMessage() {
-    const input = document.getElementById('chatInput');
-    const text = input.value.trim();
-    if (!text || isWaiting) return;
+  input.value = '';
+  input.style.height = '';
+  setWaiting(true);
+  addMessage('user', text);
+  showTyping();
 
-    input.value = '';
-    input.style.height = '';
-    setWaiting(true);
-
-    addMessage('user', text);
-    showTyping();
-
-    try {
-      const res = await fetch('/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ session_id: sessionId, message: text }),
-      });
-      const data = await res.json();
-
-      sessionId = data.session_id;
-      removeTyping();
-      addMessage('agent', data.message);
-
-      if (data.progress && Object.keys(data.progress).length) {
-        progress = data.progress;
-        renderProgress();
-      }
-
-      if (data.ready) setReady();
-    } catch (e) {
-      removeTyping();
-      addMessage('agent', 'Something went wrong. Please try again.');
+  try {
+    const res = await fetch('/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session_id: sessionId, message: text }),
+    });
+    const data = await res.json();
+    sessionId = data.session_id;
+    removeTyping();
+    addMessage('agent', data.message);
+    if (data.progress && Object.keys(data.progress).length) {
+      progress = data.progress;
+      renderSidebar();
     }
-
-    setWaiting(false);
-    document.getElementById('chatInput').focus();
+    if (data.ready) setReady();
+  } catch (e) {
+    removeTyping();
+    addMessage('agent', 'Something went wrong. Please try again.');
   }
 
-  function setWaiting(val) {
-    isWaiting = val;
-    document.getElementById('sendBtn').disabled = val;
-  }
+  setWaiting(false);
+  document.getElementById('chatInput').focus();
+}
 
-  // ── Generate report ──
-  async function generateReport() {
-    if (!sessionId) return;
+function setWaiting(v) {
+  isWaiting = v;
+  document.getElementById('sendBtn').disabled = v;
+}
 
-    document.getElementById('loadingOverlay').classList.add('visible');
-    document.getElementById('bannerGenerateBtn').disabled = true;
-    document.getElementById('headerGenerateBtn').disabled = true;
+async function generateReport() {
+  if (!sessionId) return;
+  document.getElementById('loadingOverlay').classList.add('visible');
+  document.getElementById('bannerGenerateBtn').disabled = true;
+  document.getElementById('headerGenerateBtn').disabled = true;
 
-    try {
-      const res = await fetch('/generate_chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ session_id: sessionId }),
-      });
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || 'Generation failed');
-      }
-
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'BRSR_Core_Report.pdf';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-
-      addMessage('agent', 'Your BRSR Core report has been downloaded. Review all figures against your source data before filing with SEBI.');
-    } catch (e) {
-      addMessage('agent', `Report generation failed: ${e.message}. Please try again.`);
+  try {
+    const res = await fetch('/generate_chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session_id: sessionId }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Generation failed');
     }
-
-    document.getElementById('loadingOverlay').classList.remove('visible');
-    document.getElementById('bannerGenerateBtn').disabled = false;
-    document.getElementById('headerGenerateBtn').disabled = false;
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'BRSR_Core_Report.pdf';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    addMessage('agent', 'Your BRSR Core report has been downloaded. Review all figures against source data before filing.');
+  } catch (e) {
+    addMessage('agent', `Generation failed: ${e.message}`);
   }
 
-  // ── Reset / new session ──
-  function resetChat() {
-    sessionId = null;
-    isReady = false;
-    progress = {};
-    conversationStarted = false;
+  document.getElementById('loadingOverlay').classList.remove('visible');
+  document.getElementById('bannerGenerateBtn').disabled = false;
+  document.getElementById('headerGenerateBtn').disabled = false;
+}
 
-    document.getElementById('messages').innerHTML = `
-      <div class="welcome" id="welcome">
-        <div class="welcome-icon">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
-          </svg>
-        </div>
-        <h2>Your BRSR Core agent</h2>
-        <p>I'll collect the 40 mandatory KPIs for your SEBI BRSR Core disclosure — through a conversation, not a 200-field form.</p>
-        <div class="welcome-chips">
-          <span class="chip">GHG emissions</span>
-          <span class="chip">Water</span>
-          <span class="chip">Energy</span>
-          <span class="chip">Waste</span>
-          <span class="chip">Safety</span>
-          <span class="chip">Gender wages</span>
-        </div>
-      </div>`;
-
-    document.getElementById('readyBanner').classList.remove('visible');
-    document.getElementById('headerGenerateBtn').classList.remove('visible');
-    renderProgress();
-    startConversation();
-  }
-
-  // ── Keyboard ──
-  function handleKey(e) {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      sendMessage();
-    }
-  }
-
-  function autoResize(el) {
-    el.style.height = 'auto';
-    el.style.height = Math.min(el.scrollHeight, 130) + 'px';
-  }
-
-  // ── Start conversation ──
-  async function startConversation() {
-    if (conversationStarted) return;
-    conversationStarted = true;
-
-    showTyping();
-    try {
-      const res = await fetch('/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ session_id: null, message: '__start__' }),
-      });
-      const data = await res.json();
-      sessionId = data.session_id;
-      removeTyping();
-      addMessage('agent', data.message);
-    } catch (e) {
-      removeTyping();
-      addMessage('agent', "Hi! I'm your BRSR Core agent. Let's start — what is your company name?");
-    }
-  }
-
-  // ── Init ──
-  renderProgress();
+function resetChat() {
+  sessionId = null; isReady = false; progress = {}; started = false;
+  document.getElementById('messages').innerHTML = `
+    <div class="welcome" id="welcome">
+      <p class="welcome-wordmark">DISCLO</p>
+      <div class="welcome-rule"></div>
+      <p class="welcome-sub">BRSR Core Agent</p>
+      <p class="welcome-desc">I'll collect your 40 mandatory KPIs through a conversation. No forms. Tell me what you have.</p>
+      <div class="welcome-tags">
+        <span class="welcome-tag">GHG Scope 1 &amp; 2</span>
+        <span class="welcome-tag">Water</span>
+        <span class="welcome-tag">Energy</span>
+        <span class="welcome-tag">Waste</span>
+        <span class="welcome-tag">Safety</span>
+        <span class="welcome-tag">Gender Wages</span>
+      </div>
+    </div>`;
+  document.getElementById('readyBanner').classList.remove('visible');
+  document.getElementById('headerGenerateBtn').classList.remove('visible');
+  renderSidebar();
   startConversation();
+}
+
+function handleKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+}
+
+function autoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 130) + 'px';
+}
+
+async function startConversation() {
+  if (started) return;
+  started = true;
+  showTyping();
+  try {
+    const res = await fetch('/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session_id: null, message: '__start__' }),
+    });
+    const data = await res.json();
+    sessionId = data.session_id;
+    removeTyping();
+    addMessage('agent', data.message);
+  } catch (e) {
+    removeTyping();
+    addMessage('agent', 'Ready to help with your BRSR Core report. What is your company name?');
+  }
+}
+
+renderSidebar();
+startConversation();
 </script>
 </body>
 </html>
