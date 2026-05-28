@@ -1,3 +1,4 @@
+import base64
 import io
 import json
 import os
@@ -11,7 +12,7 @@ from flask import Flask, request, send_file, Response, render_template, jsonify
 load_dotenv()  # no-op in production where env vars are set directly
 
 app = Flask(__name__)
-app.config["MAX_CONTENT_LENGTH"] = 4 * 1024 * 1024  # 4 MB form limit
+app.config["MAX_CONTENT_LENGTH"] = 20 * 1024 * 1024  # 20 MB — BRSR Annual Reports can be 10-15 MB
 
 # In-memory chat sessions: {session_id: {fields: {}, history: []}}
 # Single worker only — see Dockerfile. Switch to Redis for multi-worker.
@@ -143,12 +144,6 @@ RESPONSE FORMAT — ONLY valid JSON, no markdown, no preamble:
 }"""
 
 
-def _extract_text_from_pdf(file_bytes: bytes) -> str:
-    from pdfminer.high_level import extract_text
-    text = extract_text(io.BytesIO(file_bytes))
-    return text[:65000]
-
-
 def _extract_text_from_excel(file_bytes: bytes, filename: str) -> str:
     if filename.endswith(".csv"):
         import csv
@@ -169,18 +164,7 @@ def _extract_text_from_excel(file_bytes: bytes, filename: str) -> str:
     return "\n".join(parts)[:65000]
 
 
-def extract_brsr_fields(doc_text: str, filename: str) -> dict:
-    model = os.environ.get("OPENROUTER_MODEL", "anthropic/claude-sonnet-4-5")
-    user_msg = f"Extract all BRSR Core KPI values from this document ({filename}):\n\n{doc_text}"
-    response = get_client().chat.completions.create(
-        model=model,
-        max_tokens=3000,
-        messages=[
-            {"role": "system", "content": EXTRACTION_SYSTEM_PROMPT},
-            {"role": "user", "content": user_msg},
-        ],
-    )
-    text = response.choices[0].message.content.strip()
+def _parse_extraction_response(text: str, filename: str) -> dict:
     try:
         return json.loads(text)
     except json.JSONDecodeError:
@@ -192,10 +176,56 @@ def extract_brsr_fields(doc_text: str, filename: str) -> dict:
                 pass
     return {
         "extracted": {},
-        "summary": f"Could not extract structured data from {filename}.",
-        "message": f"I had trouble reading structured data from {filename}. Let's collect your BRSR data through the conversation instead.",
+        "message": f"I analysed {filename} but couldn't extract structured BRSR data. Let's collect it through the conversation instead.",
         "progress": {},
     }
+
+
+def extract_brsr_fields_from_pdf(file_bytes: bytes, filename: str) -> dict:
+    """Send PDF directly to Claude — native PDF understanding preserves table structure."""
+    model = os.environ.get("OPENROUTER_MODEL", "anthropic/claude-sonnet-4-5")
+    b64 = base64.b64encode(file_bytes).decode()
+    response = get_client().chat.completions.create(
+        model=model,
+        max_tokens=3000,
+        messages=[
+            {"role": "system", "content": EXTRACTION_SYSTEM_PROMPT},
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": f"data:application/pdf;base64,{b64}"},
+                    },
+                    {
+                        "type": "text",
+                        "text": (
+                            f"This is an Indian company's Annual Report or BRSR disclosure. "
+                            f"Find and extract all BRSR Core KPI values. "
+                            f"Focus on: Section C Principle-wise disclosures, the BRSR Core KPI Index table, "
+                            f"and any ESG/sustainability data appendix. Filename: {filename}"
+                        ),
+                    },
+                ],
+            },
+        ],
+    )
+    return _parse_extraction_response(response.choices[0].message.content.strip(), filename)
+
+
+def extract_brsr_fields_from_text(doc_text: str, filename: str) -> dict:
+    """Extract BRSR fields from pre-extracted text (Excel/CSV)."""
+    model = os.environ.get("OPENROUTER_MODEL", "anthropic/claude-sonnet-4-5")
+    user_msg = f"Extract all BRSR Core KPI values from this spreadsheet data ({filename}):\n\n{doc_text}"
+    response = get_client().chat.completions.create(
+        model=model,
+        max_tokens=3000,
+        messages=[
+            {"role": "system", "content": EXTRACTION_SYSTEM_PROMPT},
+            {"role": "user", "content": user_msg},
+        ],
+    )
+    return _parse_extraction_response(response.choices[0].message.content.strip(), filename)
 
 
 def call_chat_claude(history: list, existing_fields: dict = None) -> dict:
@@ -210,7 +240,7 @@ def call_chat_claude(history: list, existing_fields: dict = None) -> dict:
     model = os.environ.get("OPENROUTER_MODEL", "anthropic/claude-sonnet-4-5")
     response = get_client().chat.completions.create(
         model=model,
-        max_tokens=1500,
+        max_tokens=2000,
         messages=[
             {"role": "system", "content": system},
             *history,
@@ -809,25 +839,29 @@ def upload():
     session = chat_sessions[session_id]
 
     file_bytes = file.read()
+
     try:
         if filename.endswith(".pdf"):
-            doc_text = _extract_text_from_pdf(file_bytes)
+            result = extract_brsr_fields_from_pdf(file_bytes, file.filename)
         else:
-            doc_text = _extract_text_from_excel(file_bytes, filename)
+            try:
+                doc_text = _extract_text_from_excel(file_bytes, filename)
+            except Exception as e:
+                return jsonify({"error": f"Could not read file: {e}"}), 400
+            if len(doc_text.strip()) < 50:
+                return jsonify({"error": "The spreadsheet appears to be empty or could not be read."}), 400
+            result = extract_brsr_fields_from_text(doc_text, file.filename)
     except Exception as e:
-        return jsonify({"error": f"Could not read file: {e}"}), 400
-
-    if len(doc_text.strip()) < 100:
-        return jsonify({"error": "The file appears to be empty or could not be read."}), 400
-
-    result = extract_brsr_fields(doc_text, file.filename)
+        return jsonify({"error": f"Could not process file: {e}"}), 400
 
     extracted = result.get("extracted") or {}
     if extracted:
         session["fields"].update(extracted)
 
-    # Add to conversation history so the chat agent has context
     reply = result.get("message") or f"I've analysed {file.filename}. Let's fill in what's still missing."
+
+    # Conversations must start with a user turn — treat the upload itself as the user action.
+    session["history"].append({"role": "user", "content": f"[Uploaded: {file.filename}]"})
     session["history"].append({"role": "assistant", "content": reply})
 
     return jsonify({
