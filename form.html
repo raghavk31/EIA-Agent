@@ -236,6 +236,37 @@
   .submit-footer strong { color: var(--text); }
 
   .req { color: var(--red); }
+
+  /* ── PURPOSE CARD ── */
+  .attr-purpose { background: #0f172a; color: #fff; }
+
+  /* ── UPLOAD CARD ── */
+  .attr-upload { background: #1e3a5f; color: #fff; }
+  .upload-area {
+    border: 2px dashed var(--border); border-radius: 6px;
+    padding: 24px; text-align: center; cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .upload-area:hover { border-color: var(--accent); background: var(--accent-light); }
+  .upload-area.drag-over { border-color: var(--accent); background: var(--accent-light); }
+  .upload-area input[type="file"] { display: none; }
+  .upload-area-label { font-size: 13px; color: var(--muted); margin-top: 6px; }
+  .upload-area-label strong { color: var(--accent); cursor: pointer; }
+  .upload-status { margin-top: 10px; font-size: 12px; }
+  .upload-status.loading { color: #0369a1; }
+  .upload-status.success { color: var(--green); }
+  .upload-status.error   { color: var(--red); }
+
+  /* ── PREFILL NOTICE ── */
+  #prefill-notice {
+    display: none; margin-bottom: 20px;
+    background: var(--green-light); border: 1px solid #6ee7b7;
+    border-radius: var(--radius); padding: 12px 18px;
+    font-size: 13px; color: #065f46;
+    display: none; align-items: flex-start; gap: 10px;
+  }
+  #prefill-notice.visible { display: flex; }
+  #prefill-notice svg { flex-shrink: 0; margin-top: 1px; }
 </style>
 </head>
 <body>
@@ -254,6 +285,8 @@
   <nav class="sidebar">
     <div class="sidebar-section">
       <div class="sidebar-label">Setup</div>
+      <a href="#sec-purpose">Purpose of filing</a>
+      <a href="#sec-upload">Pre-fill from document</a>
       <a href="#sec-general">Company Details</a>
       <a href="#sec-mgmt">Governance Setup</a>
     </div>
@@ -277,6 +310,66 @@
     <div class="page-sub">Fill in all fields you have data for. For any field where data is missing or not applicable, use the status dropdown — the AI will generate appropriate regulatory language.</div>
 
     <form id="brsr-form" method="POST" action="/generate">
+
+      <!-- ═══════════════════════════════════════════
+           PURPOSE OF FILING
+      ══════════════════════════════════════════════ -->
+      <div class="section" id="sec-purpose">
+        <div class="section-header attr-purpose">
+          <span class="section-badge">Step 1</span>
+          <span class="section-title">Purpose of filing</span>
+          <span class="section-desc">Shapes the narrative emphasis of the generated report</span>
+        </div>
+        <div class="section-body">
+          <div class="form-section-pad">
+            <div class="form-field">
+              <label>Primary reason for filing this BRSR report <span class="req">*</span></label>
+              <select name="filing_motivation" required class="full">
+                <option value="">Select purpose…</option>
+                <option value="SEBI regulatory compliance (Top 1000 listed company mandate)">SEBI regulatory compliance (Top 1000 listed company mandate)</option>
+                <option value="PE / investor due diligence">PE / investor due diligence</option>
+                <option value="Export market or customer requirements">Export market or customer requirements</option>
+                <option value="Bank or debt financing requirement">Bank or debt financing requirement</option>
+                <option value="Consumer-facing brand commitment">Consumer-facing brand commitment</option>
+              </select>
+              <div class="hint">The AI will adjust tone, emphasis, and section priorities based on your audience.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════
+           DOCUMENT UPLOAD — PRE-FILL
+      ══════════════════════════════════════════════ -->
+      <div class="section" id="sec-upload">
+        <div class="section-header attr-upload">
+          <span class="section-badge">Step 2</span>
+          <span class="section-title">Pre-fill from document</span>
+          <span class="section-desc">Optional — upload last year's report or ESG data file</span>
+        </div>
+        <div class="section-body">
+          <div class="form-section-pad">
+            <div class="upload-area" id="uploadArea" onclick="document.getElementById('prefillFileInput').click()"
+                 ondragover="event.preventDefault();this.classList.add('drag-over')"
+                 ondragleave="this.classList.remove('drag-over')"
+                 ondrop="handleUploadDrop(event)">
+              <input type="file" id="prefillFileInput" accept=".pdf,.xlsx,.xls,.csv" onchange="handlePrefillUpload(this)">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+              <div class="upload-area-label">
+                Drag a file here or <strong>browse</strong><br>
+                <span style="font-size:11px;">Upload last year's BRSR report or internal ESG data (optional) — PDF or Excel (.xlsx)</span>
+              </div>
+              <div id="uploadStatus" class="upload-status"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- PREFILL NOTICE — shown after successful extraction -->
+      <div id="prefill-notice">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="14 4 6 12 2 8"/></svg>
+        <span id="prefill-notice-text">We've pre-filled what we could from your uploaded document. Please review all fields before generating.</span>
+      </div>
 
       <!-- ═══════════════════════════════════════════
            SECTION A — COMPANY DETAILS
@@ -1202,6 +1295,86 @@
 </div>
 
 <script>
+  // ── Document pre-fill ─────────────────────────────────────────────────────
+
+  function handleUploadDrop(e) {
+    e.preventDefault();
+    document.getElementById('uploadArea').classList.remove('drag-over');
+    const file = e.dataTransfer.files[0];
+    if (file) applyPrefillFile(file);
+  }
+
+  function handlePrefillUpload(input) {
+    if (input.files[0]) applyPrefillFile(input.files[0]);
+  }
+
+  async function applyPrefillFile(file) {
+    const allowed = ['.pdf', '.xlsx', '.xls', '.csv'];
+    if (!allowed.some(ext => file.name.toLowerCase().endsWith(ext))) {
+      setUploadStatus('Please upload a PDF, Excel (.xlsx / .xls), or CSV file.', 'error');
+      return;
+    }
+
+    setUploadStatus('Analysing document…', 'loading');
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const res = await fetch('/prefill', { method: 'POST', body: formData });
+      const data = await res.json();
+      const fields = data.fields || {};
+      const count = applyFields(fields);
+
+      if (count > 0) {
+        setUploadStatus(`Done — ${file.name}`, 'success');
+        const notice = document.getElementById('prefill-notice');
+        document.getElementById('prefill-notice-text').textContent =
+          `We've pre-filled ${count} field${count > 1 ? 's' : ''} from your uploaded document. Please review all values before generating.`;
+        notice.classList.add('visible');
+        updateKPICounter();
+      } else {
+        setUploadStatus('No matching fields found. Fill in the form manually.', 'error');
+      }
+    } catch (e) {
+      setUploadStatus('Could not read the file. Fill in the form manually.', 'error');
+    }
+  }
+
+  function applyFields(fields) {
+    let count = 0;
+    for (const [key, value] of Object.entries(fields)) {
+      if (value === null || value === undefined || value === '') continue;
+      const el = document.querySelector(`[name="${key}"]`);
+      if (!el) continue;
+
+      if (el.tagName === 'SELECT') {
+        const match = [...el.options].find(o =>
+          o.value === String(value) || o.text.trim() === String(value).trim()
+        );
+        if (match) { el.value = match.value; count++; }
+      } else {
+        el.value = value;
+        count++;
+        // If this field has an associated status dropdown, flip it to 'available'
+        const statusSel = document.querySelector(`[name="${key.replace('_current','_status').replace('_prev','')}"]`);
+        if (statusSel && statusSel.value !== 'available') {
+          statusSel.value = 'available';
+          statusSel.dispatchEvent(new Event('change'));
+        }
+      }
+    }
+    return count;
+  }
+
+  function setUploadStatus(msg, type) {
+    const el = document.getElementById('uploadStatus');
+    el.textContent = msg;
+    el.className = `upload-status ${type}`;
+  }
+
+  // ── toggleNA and KPI counter ───────────────────────────────────────────────
+
   function toggleNA(select, panelId) {
     const panel = document.getElementById(panelId);
     if (!panel) return;

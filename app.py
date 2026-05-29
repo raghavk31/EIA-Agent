@@ -103,6 +103,51 @@ ONLY valid JSON — no markdown, no code fences, no preamble:
 Set ready=true only when all 9 sections are true.
 ALWAYS evaluate all 9 sections against ALREADY COLLECTED fields when computing progress."""
 
+# ── Filing motivation → system prompt injection strings ──────────────────────
+
+MOTIVATION_CONTEXTS = {
+    "SEBI regulatory compliance (Top 1000 listed company mandate)": (
+        "REPORTING PURPOSE CONTEXT: This report is prepared for SEBI regulatory compliance "
+        "under the Top 1000 listed company mandate (SEBI Circular SEBI/HO/CFD/CFD-SEC-2/P/CIR/2023/122). "
+        "Emphasise completeness of all mandatory KPI disclosures, precise regulatory language aligned "
+        "with SEBI's prescribed format, and thorough documentation of governance processes. "
+        "Tone must be formal, submission-ready, and audit-proof. Every mandatory KPI must be addressed — "
+        "use the appropriate Pattern (A/B/C/D) for missing data but never omit a disclosure."
+    ),
+    "PE / investor due diligence": (
+        "REPORTING PURPOSE CONTEXT: This report will be reviewed by PE investors or financial analysts "
+        "conducting ESG due diligence. Foreground governance structures, risk management frameworks, "
+        "board-level ESG oversight mechanisms, and the financial materiality of environmental and social risks. "
+        "Investors prioritise control systems and accountability over raw metrics — explicitly connect "
+        "disclosures to risk mitigation and long-term value creation. Name oversight bodies, quantify their "
+        "inputs, and describe remediation processes."
+    ),
+    "Export market or customer requirements": (
+        "REPORTING PURPOSE CONTEXT: This report is prepared to meet export market or customer supply chain "
+        "ESG requirements. Foreground supply chain disclosures (Principle 8), Principle 9 consumer "
+        "responsibility, environmental performance metrics (energy intensity, water intensity, GHG intensity), "
+        "and any alignment with international frameworks (GRI, TCFD, CDP). Emphasise value-chain "
+        "accountability — upstream supplier standards, responsible sourcing, and traceability. Reference "
+        "international equivalences where applicable."
+    ),
+    "Bank or debt financing requirement": (
+        "REPORTING PURPOSE CONTEXT: This report is prepared to support a bank loan or debt financing "
+        "application. Foreground climate risk exposure (physical and transition risks), environmental "
+        "liability management, ESG governance robustness, and risk-adjusted sustainability signals. "
+        "Lenders assess whether environmental and social risks are managed to a standard that protects "
+        "asset value and cash flows. Explicitly address risk identification, management protocols, and "
+        "any climate scenario analysis."
+    ),
+    "Consumer-facing brand commitment": (
+        "REPORTING PURPOSE CONTEXT: This report reflects the company's consumer-facing sustainability "
+        "commitment. Foreground community and inclusive development disclosures (Principle 8), employee "
+        "and worker wellbeing (Principle 3), product responsibility and consumer protection (Principle 9), "
+        "and any voluntary commitments that exceed regulatory minimums. Tone should be accessible and "
+        "values-driven — not just regulatory — while remaining factually precise. Highlight positive "
+        "impact outcomes where data supports them."
+    ),
+}
+
 
 EXTRACTION_SYSTEM_PROMPT = """You are a BRSR Core data extraction specialist. Your only job is to read a document and extract BRSR KPI values from it.
 
@@ -458,13 +503,15 @@ Output the complete report in Markdown. Structure exactly:
 """
 
 
-def call_claude(data: dict) -> str:
+def call_claude(data: dict, motivation_context: str = "") -> str:
     model = os.environ.get("OPENROUTER_MODEL", "anthropic/claude-sonnet-4-5")
+    # Inject motivation context before the base system prompt so it frames the whole output
+    system = (motivation_context + "\n\n" + SYSTEM_PROMPT) if motivation_context else SYSTEM_PROMPT
     response = get_client().chat.completions.create(
         model=model,
         max_tokens=16000,
         messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "content": system},
             {"role": "user",   "content": build_user_message(data)},
         ],
     )
@@ -910,8 +957,27 @@ def build_payload(get_str) -> dict:
 
 # ── PDF helper ────────────────────────────────────────────────────────────────
 
-def _generate_pdf_response(data: dict):
-    draft = call_claude(data)
+def _extract_pdf_text_fitz(file_bytes: bytes) -> str:
+    """Extract full text from PDF using PyMuPDF. Falls back to pdfminer if unavailable."""
+    try:
+        import fitz  # PyMuPDF
+        doc = fitz.open(stream=file_bytes, filetype="pdf")
+        pages = [page.get_text() for page in doc]
+        doc.close()
+        full = "\n".join(pages)
+        print(f"[prefill] fitz extracted {len(full)} chars from {len(pages)} pages")
+        return full[:120000]
+    except ImportError:
+        print("[prefill] PyMuPDF not installed, falling back to pdfminer")
+        return _pdfminer_extract_brsr_section(file_bytes)
+    except Exception as e:
+        print(f"[prefill] fitz failed ({e}), falling back to pdfminer")
+        return _pdfminer_extract_brsr_section(file_bytes)
+
+
+def _generate_pdf_response(data: dict, filing_motivation: str = ""):
+    motivation_context = MOTIVATION_CONTEXTS.get(filing_motivation, "")
+    draft = call_claude(data, motivation_context=motivation_context)
     pdf_bytes = markdown_to_pdf(draft, data)
     company_name = (data.get("company", {}).get("name") or "Company").replace(" ", "_")
     fy = (data.get("company", {}).get("financial_year") or "FY").replace(" ", "_")
@@ -939,6 +1005,38 @@ def agent_app():
 @app.route("/form")
 def legacy_form():
     return send_file("form.html")
+
+
+@app.route("/prefill", methods=["POST"])
+def prefill():
+    """Extract BRSR fields from an uploaded PDF/Excel for form pre-filling.
+    Always returns 200 with {"fields": {...}} — errors silently fall back to empty."""
+    file = request.files.get("file")
+    if not file or not file.filename:
+        return jsonify({"fields": {}})
+
+    filename = file.filename.lower()
+    try:
+        file_bytes = file.read()
+        if filename.endswith(".pdf"):
+            text = _extract_pdf_text_fitz(file_bytes)
+            if not text.strip():
+                return jsonify({"fields": {}})
+            result = extract_brsr_fields_from_text(text, file.filename)
+        elif filename.endswith((".xlsx", ".xls", ".csv")):
+            text = _extract_text_from_excel(file_bytes, filename)
+            if not text.strip():
+                return jsonify({"fields": {}})
+            result = extract_brsr_fields_from_text(text, file.filename)
+        else:
+            return jsonify({"fields": {}})
+
+        fields = result.get("extracted") or {}
+        print(f"[prefill] form pre-fill: {len(fields)} fields extracted from {file.filename}")
+        return jsonify({"fields": fields})
+    except Exception as e:
+        print(f"[prefill] error processing {file.filename}: {e}")
+        return jsonify({"fields": {}})
 
 
 @app.route("/chat", methods=["POST"])
@@ -1073,7 +1171,7 @@ def generate_chat():
         return jsonify({"error": "Company name is required before generating the report."}), 400
 
     data = build_payload(lambda key: str(fields.get(key, "")))
-    return _generate_pdf_response(data)
+    return _generate_pdf_response(data, filing_motivation=fields.get("filing_motivation", ""))
 
 
 @app.route("/generate", methods=["POST"])
@@ -1096,7 +1194,7 @@ a{{display:inline-block;padding:10px 20px;background:#0ea5e9;color:#fff;border-r
 <a href="/form">← Back to form</a></body></html>""", 400
 
     data = build_payload(lambda key: f.get(key, ""))
-    return _generate_pdf_response(data)
+    return _generate_pdf_response(data, filing_motivation=f.get("filing_motivation", ""))
 
 
 if __name__ == "__main__":
