@@ -966,6 +966,7 @@ async function handleFileUpload(file) {
   }
 
   if (!started) started = true;
+  document.getElementById('headerGenerateBtn').classList.add('visible');
   setWaiting(true);
   addUploadMessage(file.name);
   showTyping('Analysing your document…');
@@ -1044,6 +1045,7 @@ async function sendMessage() {
   input.style.height = '';
   setWaiting(true);
   started = true;
+  document.getElementById('headerGenerateBtn').classList.add('visible');
   addMessage('user', text);
   showTyping();
 
@@ -1090,7 +1092,7 @@ async function generateReport() {
     const res = await fetch('/generate_chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ session_id: sessionId }),
+      body: JSON.stringify({ session_id: sessionId, client_fields: storedFields }),
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));

@@ -1035,11 +1035,20 @@ def upload():
 def generate_chat():
     body = request.json or {}
     session_id = body.get("session_id")
+    client_fields = body.get("client_fields") or {}
 
-    if not session_id or session_id not in chat_sessions:
+    if session_id and session_id in chat_sessions:
+        fields = chat_sessions[session_id]["fields"]
+        # Merge any client fields the server might have missed
+        if client_fields:
+            for k, v in client_fields.items():
+                if v not in (None, "") and fields.get(k) in (None, ""):
+                    fields[k] = v
+    elif client_fields:
+        # Server restarted — rebuild fields from client-side mirror
+        fields = dict(client_fields)
+    else:
         return jsonify({"error": "Session not found. Please refresh and start again."}), 400
-
-    fields = chat_sessions[session_id]["fields"]
 
     if not fields.get("company_name"):
         return jsonify({"error": "Company name is required before generating the report."}), 400
