@@ -181,15 +181,26 @@ def _extract_text_from_excel(file_bytes: bytes, filename: str) -> str:
 
 
 def _parse_extraction_response(text: str, filename: str) -> dict:
+    # Strip markdown code fences if present
+    cleaned = re.sub(r'^```(?:json)?\s*', '', text.strip(), flags=re.MULTILINE)
+    cleaned = re.sub(r'\s*```$', '', cleaned.strip(), flags=re.MULTILINE)
     try:
-        return json.loads(text)
+        result = json.loads(cleaned)
+        extracted = result.get("extracted") or {}
+        print(f"[extract] {filename}: {len(extracted)} fields found: {list(extracted.keys())}")
+        return result
     except json.JSONDecodeError:
-        m = re.search(r'\{[\s\S]*\}', text)
+        # Last resort: grab the outermost {...}
+        m = re.search(r'\{[\s\S]*\}', cleaned)
         if m:
             try:
-                return json.loads(m.group())
+                result = json.loads(m.group())
+                extracted = result.get("extracted") or {}
+                print(f"[extract] {filename} (regex fallback): {len(extracted)} fields found")
+                return result
             except Exception:
                 pass
+    print(f"[extract] {filename}: FAILED to parse JSON from response (len={len(text)}). Raw: {text[:300]}")
     return {
         "extracted": {},
         "message": f"I analysed {filename} but couldn't extract structured BRSR data. Let's collect it through the conversation instead.",
@@ -376,22 +387,29 @@ def call_chat_claude(history: list, existing_fields: dict = None) -> dict:
 
 def compute_progress(fields: dict) -> dict:
     """Deterministic server-side progress — never depends on Claude's JSON assessment."""
-    def present(*keys):
-        return all(fields.get(k) not in (None, "", 0) for k in keys)
-    def any_present(*keys):
-        return any(fields.get(k) not in (None, "", 0) for k in keys)
+    def str_present(*keys):
+        # String fields: must be non-None, non-empty
+        return all(fields.get(k) not in (None, "") for k in keys)
+
+    def num_present(*keys):
+        # Numeric fields: 0 IS a valid value (zero LTIFR, zero fatalities, etc.)
+        return all(fields.get(k) is not None and fields.get(k) != "" for k in keys)
+
+    def any_num_present(*keys):
+        return any(fields.get(k) is not None and fields.get(k) != "" for k in keys)
+
     waste = ("waste_hazardous", "waste_nonhazardous", "waste_plastic",
              "waste_ewaste", "waste_biomedical", "waste_construction", "waste_battery")
     return {
-        "company":      present("company_name", "financial_year", "revenue_current"),
-        "ghg":          present("scope1_current", "scope2_current"),
-        "water":        present("water_consumed_current"),
-        "energy":       present("energy_nonrenew_current", "energy_renew_current"),
-        "waste":        any_present(*waste),
-        "safety":       present("ltifr_emp_current", "fatalities_emp_current"),
-        "gender":       present("female_wages_pct_current"),
-        "supply_chain": present("msme_pct_current"),
-        "customers":    present("ap_days_current"),
+        "company":      str_present("company_name", "financial_year") and num_present("revenue_current"),
+        "ghg":          num_present("scope1_current", "scope2_current"),
+        "water":        num_present("water_consumed_current"),
+        "energy":       num_present("energy_nonrenew_current", "energy_renew_current"),
+        "waste":        any_num_present(*waste),
+        "safety":       num_present("ltifr_emp_current", "fatalities_emp_current"),
+        "gender":       num_present("female_wages_pct_current"),
+        "supply_chain": num_present("msme_pct_current"),
+        "customers":    num_present("ap_days_current"),
     }
 
 
@@ -1020,6 +1038,7 @@ def upload():
     session["history"].append({"role": "assistant", "content": reply})
 
     prog = compute_progress(session["fields"])
+    print(f"[upload] {file.filename}: {len(extracted)} fields extracted, progress={prog}")
     all_fields = {k: v for k, v in session["fields"].items() if v not in (None, "")}
     return jsonify({
         "session_id": session_id,
